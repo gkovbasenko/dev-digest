@@ -50,15 +50,8 @@ export const s = {
   findingChip: (color: string): CSSProperties => ({
     display: "inline-flex",
     alignItems: "center",
-    gap: 4,
+    gap: 3,
     color,
-    background: `${color}22`,
-    border: `1px solid ${color}55`,
-    borderRadius: 20,
-    padding: "2px 8px 2px 6px",
-    fontSize: 12,
-    fontWeight: 600,
-    lineHeight: 1,
   }),
   costCell: {
     fontSize: 12.5,

@@ -7,19 +7,28 @@ import { useTranslations } from "next-intl";
 import { Icon, Avatar, Badge, CircularScore, SEV } from "@devdigest/ui";
 import type { PrMeta } from "@/lib/types";
 import { RunCostBadge } from "@/components/RunCostBadge/RunCostBadge";
+import { usePrReviews } from "@/lib/hooks/reviews";
 import { FINDINGS_FIELDS, SIZE_COLOR, STATUS_META } from "../../constants";
 import { relativeTime, sizeOf } from "../../helpers";
 import { s } from "../../styles";
+import { FindingsPopover } from "../FindingsPopover/FindingsPopover";
 
 export function PRRow({ pr, repoId }: { pr: PrMeta; repoId: string }) {
   const t = useTranslations("prReview");
   const router = useRouter();
   const [h, setH] = React.useState(false);
+  const [anchorRect, setAnchorRect] = React.useState<DOMRect | null>(null);
   const st = STATUS_META[pr.status] ?? STATUS_META.needs_review!;
   const { size, lines } = sizeOf(pr);
   const reviewed = pr.score != null; // null score ⇒ PR has never been reviewed
   const totalFindings =
     (pr.findings_critical ?? 0) + (pr.findings_warning ?? 0) + (pr.findings_suggestion ?? 0);
+
+  const { data: reviewsData, isLoading: reviewsLoading } = usePrReviews(
+    anchorRect && totalFindings > 0 ? pr.id : undefined,
+  );
+  const latestReview = reviewsData?.find((r) => r.kind === "review");
+
   return (
     <div
       onMouseEnter={() => setH(true)}
@@ -56,7 +65,17 @@ export function PRRow({ pr, repoId }: { pr: PrMeta; repoId: string }) {
           <span style={s.muted}>—</span>
         )}
       </div>
-      <div style={s.findingsCell}>
+      <div
+        style={s.findingsCell}
+        onMouseEnter={(e) => {
+          e.stopPropagation();
+          setAnchorRect(e.currentTarget.getBoundingClientRect());
+        }}
+        onMouseLeave={(e) => {
+          e.stopPropagation();
+          setAnchorRect(null);
+        }}
+      >
         {!reviewed || totalFindings === 0 ? (
           <span style={s.muted}>—</span>
         ) : (
@@ -72,6 +91,13 @@ export function PRRow({ pr, repoId }: { pr: PrMeta; repoId: string }) {
               </span>
             );
           })
+        )}
+        {anchorRect && totalFindings > 0 && (
+          <FindingsPopover
+            review={latestReview}
+            isLoading={reviewsLoading}
+            anchorRect={anchorRect}
+          />
         )}
       </div>
       <div>

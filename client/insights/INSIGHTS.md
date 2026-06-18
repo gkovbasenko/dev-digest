@@ -19,6 +19,8 @@ See also: `insights/gotchas.md` for known quirks at project start.
 
 ## What Doesn't Work
 
+2026-06-18 — Fixing `.js` extensions in `client/src/vendor/shared/index.ts` alone is NOT enough. The individual contract files also import each other with `.js` extensions (`eval-ci.ts`, `observability.ts`, `platform.ts`, `productionize.ts`, `review-api.ts`, `adapters.ts`). All 6 must be fixed in addition to the barrel. Grep: `from '\./.*\.js'` in `client/src/vendor/shared/` to find them all. ref: client/src/vendor/shared/contracts/eval-ci.ts:2
+
 2026-06-18 — `client/src/vendor/shared/index.ts` used `.js` extensions on all re-exports (`export * from './contracts/findings.js'`). This is the TypeScript ESM convention for Node.js but Next.js/webpack cannot resolve it — "Module not found: Can't resolve './contracts/findings.js'". The bug was latent: `import type` is erased at compile time so webpack never resolved the module. It surfaced only when `Severity` was imported as a value. Fix: remove all `.js` extensions from the client barrel. ref: client/src/vendor/shared/index.ts:17
 
 2026-06-18 — `SeverityChip` with "N dots total" (render exactly N circles) is visually wrong — it gives no sense of scale. The correct model is always 12 slots: first `min(count, 12)` render as a single merged solid segment (height=2px), the remaining (12-N) render as faded separate dots. Width of merged segment = `N * SLOT_W + (N-1) * GAP`. ref: client/src/components/SeverityChip/SeverityChip.tsx:1
@@ -37,6 +39,8 @@ See also: `insights/gotchas.md` for known quirks at project start.
 
 ## Tool & Library Notes
 
+2026-06-18 — In RTL tests, `[style*="flex-direction: column"]` is too broad to assert "no SeverityChip rendered" — RunHistory's content wrapper also uses `flexDirection: column`, producing false positives. The reliable proxy for SeverityChip absence is `[style*="opacity: 0.2"]` (the faded dot elements), which is unique to that component. ref: client/src/app/repos/[repoId]/pulls/[number]/_components/RunHistory/RunHistory.test.tsx:110
+
 ## Recurring Errors & Fixes
 
 2026-06-17 — `git add` on paths with square brackets (Next.js dynamic routes like `[repoId]`, `[number]`) fails in zsh with "no matches found: client/src/app/repos/[repoId]/..." — zsh glob-expands brackets before git sees them. Fix: always quote such paths: `git add "client/src/app/repos/[repoId]/pulls/..."`. ref: client/src/app/repos/[repoId]/pulls/constants.ts:1
@@ -44,6 +48,8 @@ See also: `insights/gotchas.md` for known quirks at project start.
 ## Session Notes
 
 2026-06-17 — Run Cost Badge: added COST column to PR list → surfaced `@devdigest/shared` dual-copy trap (client has its own vendor copy, gotchas.md was wrong). Fixed by updating client's local platform.ts. Files: client/src/vendor/shared/contracts/platform.ts, client/src/app/repos/[repoId]/pulls/constants.ts, client/src/components/RunCostBadge/RunCostBadge.tsx.
+
+2026-06-18 — Tests: SeverityChip.test.tsx (7 tests — null guard, counts, dot counts, cap at 12); RunHistory.test.tsx updated — removed obsolete `/5 blockers/` assertion (text replaced by chips), added 3 per-severity chip tests. All 32 client tests green. Commit 1a64a18. Files: client/src/components/SeverityChip/SeverityChip.test.tsx, client/src/app/repos/[repoId]/pulls/[number]/_components/RunHistory/RunHistory.test.tsx.
 
 2026-06-18 — SeverityChip visual redesign + RunHistory chips: fixed dot model to 12-slot filled/faded pattern, added `findings_critical/warning/suggestion` to `RunSummary` via server JOIN, replaced "5 finding(s) · 4 blockers" text in RunHistory with SeverityChip components. Files: client/src/components/SeverityChip/SeverityChip.tsx, client/src/app/repos/[repoId]/pulls/[number]/_components/RunHistory/RunHistory.tsx, server/src/modules/reviews/repository/run.repo.ts, both vendor/shared/contracts/trace.ts.
 

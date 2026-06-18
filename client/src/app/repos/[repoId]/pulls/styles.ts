@@ -42,7 +42,7 @@ export const s = {
   scoreCell: { display: "flex", alignItems: "center" } satisfies CSSProperties,
   findingsCell: {
     display: "flex",
-    alignItems: "center",
+    alignItems: "flex-end",
     gap: 10,
     fontSize: 12.5,
     color: "var(--text-secondary)",

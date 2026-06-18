@@ -1,3 +1,4 @@
+import { Severity } from "@devdigest/shared";
 import type { PrMeta } from "../../../../lib/types";
 
 /** Constants for the PR list page (/repos/:repoId/pulls). */
@@ -28,9 +29,9 @@ export const GRID = "1fr 132px 92px 60px 150px 118px 72px 78px";
 
 /** PrMeta severity-count field per severity bucket (for the FINDINGS column). */
 export const FINDINGS_FIELDS = [
-  { sev: "CRITICAL", field: "findings_critical" },
-  { sev: "WARNING", field: "findings_warning" },
-  { sev: "SUGGESTION", field: "findings_suggestion" },
+  { sev: Severity.enum.CRITICAL, field: "findings_critical" },
+  { sev: Severity.enum.WARNING, field: "findings_warning" },
+  { sev: Severity.enum.SUGGESTION, field: "findings_suggestion" },
 ] as const;
 
 /** Line-count thresholds for the S/M/L size bucket. */

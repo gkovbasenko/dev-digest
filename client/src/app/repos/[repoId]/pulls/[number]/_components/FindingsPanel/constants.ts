@@ -1,4 +1,4 @@
-import type { FindingActionKind, Severity } from "@devdigest/shared";
+import { Severity, type FindingActionKind } from "@devdigest/shared";
 
 /** Sort weight per severity (lower = shown first). */
 export const SEVERITY_ORDER: Record<string, number> = {
@@ -19,7 +19,7 @@ export const KEY_TO_ACTION: Record<string, FindingActionKind> = {
 
 /** Severity filter pills — order matches SEVERITY_ORDER. */
 export const SEVERITY_FILTERS: { sev: Severity }[] = [
-  { sev: "CRITICAL" },
-  { sev: "WARNING" },
-  { sev: "SUGGESTION" },
+  { sev: Severity.enum.CRITICAL },
+  { sev: Severity.enum.WARNING },
+  { sev: Severity.enum.SUGGESTION },
 ];

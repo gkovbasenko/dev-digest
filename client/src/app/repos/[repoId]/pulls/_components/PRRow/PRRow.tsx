@@ -4,9 +4,10 @@
 import React from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Icon, Avatar, Badge, CircularScore, SEV } from "@devdigest/ui";
+import { Icon, Avatar, Badge, CircularScore } from "@devdigest/ui";
 import type { PrMeta } from "@/lib/types";
 import { RunCostBadge } from "@/components/RunCostBadge/RunCostBadge";
+import { SeverityChip } from "@/components/SeverityChip/SeverityChip";
 import { usePrReviews } from "@/lib/hooks/reviews";
 import { FINDINGS_FIELDS, SIZE_COLOR, STATUS_META } from "../../constants";
 import { relativeTime, sizeOf } from "../../helpers";
@@ -82,14 +83,7 @@ export function PRRow({ pr, repoId }: { pr: PrMeta; repoId: string }) {
           FINDINGS_FIELDS.map(({ sev, field }) => {
             const n = pr[field] ?? 0;
             if (!n) return null;
-            const meta = SEV[sev];
-            const SIcon = Icon[meta.icon];
-            return (
-              <span key={sev} className="tnum" style={s.findingChip(meta.c)}>
-                <SIcon size={13} />
-                {n}
-              </span>
-            );
+            return <SeverityChip key={sev} sev={sev} count={n} />;
           })
         )}
         {anchorRect && totalFindings > 0 && (

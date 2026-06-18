@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { Provider } from './knowledge.js';
+import { Provider } from './knowledge';
 
 /**
  * Platform / scaffolding DTOs owned by F1:

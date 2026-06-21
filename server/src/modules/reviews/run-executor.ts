@@ -184,6 +184,17 @@ export class ReviewRunExecutor {
 
       const task = taskLine(pull) + rankNote;
 
+      // ---- Skills: load linked + enabled skill bodies -------------------------
+      // linkedSkills() returns rows ordered by agent_skills.order (ASC), so the
+      // array preserves the order the user set in the Skills editor tab.
+      const linkedSkills = await this.container.agentsRepo.linkedSkills(agent.id);
+      const skillBodies = linkedSkills
+        .filter((s) => s.skill.enabled)
+        .map((s) => s.skill.body);
+      if (skillBodies.length > 0) {
+        runLog.info(`Skills: ${skillBodies.length} skill(s) attached to prompt`);
+      }
+
       // ---- Engine: assemble → single-pass → grounding -----------------------
       // The pure review pipeline lives in @devdigest/reviewer-core (shared with
       // the CI runner). The service owns only I/O: repo-intel context resolution
@@ -196,6 +207,9 @@ export class ReviewRunExecutor {
         // Per-agent review strategy (configured in the Agent editor); falls back
         // to the studio default. single-pass = whole diff in one call.
         strategy: agent.strategy ?? REVIEW_STRATEGY,
+        // Skills: resolved bodies (ordered). assemblePrompt renders them as
+        // "## Skills / rules" section in the user message. Empty → section omitted.
+        ...(skillBodies.length > 0 ? { skills: skillBodies } : {}),
         // T1.3 — pass the callers digest only when we built one. assemblePrompt
         // omits the section when this is empty/undefined.
         ...(callersDigest ? { callers: callersDigest } : {}),

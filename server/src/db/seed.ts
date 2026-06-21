@@ -191,6 +191,18 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
       version: 1,
       createdBy: userId,
     },
+    {
+      workspaceId,
+      name: 'Test Quality Reviewer',
+      description: 'Checks test coverage, corner cases, excessive mocking, and flaky patterns.',
+      provider: 'openai',
+      model: 'gpt-4.1',
+      systemPrompt:
+        'You are a test-quality PR reviewer. Examine the diff for uncovered branches, missing corner cases, excessive mocking that hides real behaviour, and flaky test patterns (time-dependent, random, order-dependent). Return at most 5 findings ranked by severity. Cite exact file:line.',
+      enabled: true,
+      version: 1,
+      createdBy: userId,
+    },
   ];
   for (const a of seedAgents) {
     const [existing] = await db
@@ -198,6 +210,211 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
       .from(t.agents)
       .where(and(eq(t.agents.workspaceId, workspaceId), eq(t.agents.name, a.name)));
     if (!existing) await db.insert(t.agents).values(a);
+  }
+
+  // ---- skills (6 reusable instruction blocks) ----
+  const seedSkills: Array<{ slug: string; values: typeof t.skills.$inferInsert }> = [
+    {
+      slug: 'pr-quality-rubric',
+      values: {
+        workspaceId,
+        name: 'PR Quality Rubric',
+        description: 'General PR quality rubric covering clarity, correctness, and edge cases.',
+        type: 'rubric',
+        source: 'manual',
+        body: `# PR Quality Rubric
+
+Score the pull request on the following dimensions:
+
+1. **Clarity** — Is the code readable without needing the author to explain it?
+2. **Correctness** — Are there obvious bugs, off-by-one errors, or logic issues?
+3. **Edge cases** — Does the code handle null/undefined, empty collections, and boundary values?
+4. **Naming** — Are variables, functions, and types named to reveal intent?
+5. **Size** — Is the PR small enough to review meaningfully in one sitting (< 400 lines changed)?
+
+Flag any dimension that scores below 3/5.`,
+        enabled: true,
+        version: 1,
+      },
+    },
+    {
+      slug: 'no-then-chains',
+      values: {
+        workspaceId,
+        name: 'No .then() Chains',
+        description: 'Forbid .then() chaining — require async/await instead.',
+        type: 'convention',
+        source: 'manual',
+        body: `# Convention: No .then() Chains
+
+**Rule:** Do not use \`.then()\` / \`.catch()\` / \`.finally()\` chains. Use \`async/await\` instead.
+
+**Why:** Promise chains obscure control flow, make error handling error-prone, and complicate debugging.
+
+**Flag any diff line that:**
+- Calls \`.then(\` on a promise
+- Chains \`.catch(\` without \`try/catch\`
+- Nests \`.then(\` inside another \`.then(\`
+
+**Correct pattern:**
+\`\`\`ts
+// ✅ Good
+const result = await fetchUser(id);
+
+// ❌ Bad
+fetchUser(id).then(result => { ... });
+\`\`\``,
+        enabled: true,
+        version: 1,
+      },
+    },
+    {
+      slug: 'secret-leakage-gate',
+      values: {
+        workspaceId,
+        name: 'Secret Leakage Gate',
+        description: 'Detect hardcoded secrets, API keys, and credentials in the diff.',
+        type: 'security',
+        source: 'manual',
+        body: `# Security: Secret Leakage Gate
+
+**Critical check:** Scan the diff for hardcoded secrets.
+
+Flag as CRITICAL if the diff contains:
+- API keys (patterns: \`sk_live_\`, \`pk_live_\`, \`AKIA\`, \`ghp_\`, \`ghs_\`)
+- Passwords or tokens in string literals assigned to variables named \`password\`, \`secret\`, \`token\`, \`key\`, \`credential\`
+- Private keys (PEM headers: \`-----BEGIN RSA PRIVATE KEY-----\`)
+- Database connection strings with embedded credentials
+- JWT secrets hardcoded in source
+
+**Action:** If found, mark severity CRITICAL and suggest moving to environment variable or secrets manager.`,
+        enabled: true,
+        version: 1,
+      },
+    },
+    {
+      slug: 'lethal-trifecta',
+      values: {
+        workspaceId,
+        name: 'Lethal Trifecta',
+        description: 'Detect private data + untrusted input + exfiltration path in same change.',
+        type: 'security',
+        source: 'manual',
+        body: `# Security: Lethal Trifecta
+
+The "lethal trifecta" is when a single change touches all three of:
+1. **Private data** — PII, credentials, financial data, internal IDs
+2. **Untrusted input** — user-supplied query params, request body, headers, file uploads
+3. **Exfiltration path** — HTTP response, log statement, file write, external API call
+
+**Flag as CRITICAL** if the diff introduces or modifies code where all three elements are reachable in the same data-flow path.
+
+**Examples:**
+- Reading \`req.body.userId\` and returning it in an error message that includes DB row data
+- Logging user input alongside internal system state
+- Passing URL query params directly to an external HTTP call that returns sensitive data`,
+        enabled: true,
+        version: 1,
+      },
+    },
+    {
+      slug: 'phantom-api-gate',
+      values: {
+        workspaceId,
+        name: 'Phantom API Gate',
+        description: 'Detect undocumented or phantom API calls introduced in the diff.',
+        type: 'security',
+        source: 'manual',
+        body: `# Security: Phantom API Gate
+
+**Rule:** Every external HTTP call must be intentional, documented, and scoped.
+
+Flag as WARNING or CRITICAL if the diff:
+- Introduces a \`fetch()\`, \`axios()\`, \`http.get()\`, or similar call to a URL not previously present
+- Passes user-controlled data as part of the URL or request body to an external endpoint
+- Adds a new outbound endpoint not listed in the API contract or architecture docs
+- Calls an internal service endpoint that bypasses authentication middleware
+
+**Ask:** Is this call documented? Is the destination URL allowlisted? Does it leak internal data?`,
+        enabled: true,
+        version: 1,
+      },
+    },
+    {
+      slug: 'test-coverage-nudge',
+      values: {
+        workspaceId,
+        name: 'Test Coverage Nudge',
+        description: 'Flag missing test coverage for changed branches and new functions.',
+        type: 'custom',
+        source: 'manual',
+        body: `# Test Coverage Nudge
+
+For every new function, method, or branch introduced in the diff, check whether a corresponding test exists.
+
+**Flag as WARNING if:**
+- A new \`if\` / \`else\` / \`switch\` branch has no test covering the alternate path
+- A new exported function has no test file or test case referencing it
+- An error path (\`catch\`, early \`return\`, \`throw\`) is reachable but not tested
+- A public API route has no integration test
+
+**Do not flag:**
+- Trivial getters/setters with no logic
+- Generated code or migrations
+- Test files themselves
+
+Suggest adding a test case with the specific scenario that would exercise the uncovered path.`,
+        enabled: true,
+        version: 1,
+      },
+    },
+  ];
+
+  const skillIdBySlug = new Map<string, string>();
+  for (const { slug, values } of seedSkills) {
+    let [existing] = await db
+      .select()
+      .from(t.skills)
+      .where(and(eq(t.skills.workspaceId, workspaceId), eq(t.skills.name, values.name)));
+    if (!existing) {
+      [existing] = await db.insert(t.skills).values(values).returning();
+      // snapshot version 1 into skill_versions
+      await db
+        .insert(t.skillVersions)
+        .values({ skillId: existing!.id, version: 1, body: values.body })
+        .onConflictDoNothing();
+    }
+    skillIdBySlug.set(slug, existing!.id);
+  }
+
+  // ---- agent–skill links ----
+  // Security Reviewer: pr-quality-rubric, secret-leakage-gate, lethal-trifecta
+  // Test Quality Reviewer: pr-quality-rubric, test-coverage-nudge, no-then-chains, phantom-api-gate
+  const agentSkillLinks: Array<{ agentName: string; skillSlugs: string[] }> = [
+    {
+      agentName: 'Security Reviewer',
+      skillSlugs: ['pr-quality-rubric', 'secret-leakage-gate', 'lethal-trifecta'],
+    },
+    {
+      agentName: 'Test Quality Reviewer',
+      skillSlugs: ['pr-quality-rubric', 'test-coverage-nudge', 'no-then-chains', 'phantom-api-gate'],
+    },
+  ];
+
+  for (const { agentName, skillSlugs } of agentSkillLinks) {
+    const [agent] = await db
+      .select()
+      .from(t.agents)
+      .where(and(eq(t.agents.workspaceId, workspaceId), eq(t.agents.name, agentName)));
+    if (!agent) continue;
+    for (let i = 0; i < skillSlugs.length; i++) {
+      const skillId = skillIdBySlug.get(skillSlugs[i]!);
+      if (!skillId) continue;
+      await db
+        .insert(t.agentSkills)
+        .values({ agentId: agent.id, skillId, order: i })
+        .onConflictDoNothing();
+    }
   }
 
   return { workspaceId, userId };

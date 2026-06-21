@@ -30,7 +30,12 @@ const EnvSchema = z.object({
   WEB_PORT: z.coerce.number().int().default(3000),
   DEVDIGEST_CLONE_DIR: z.string().optional(),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
-  LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).optional(),
+  // dotenv loads a blank `LOG_LEVEL=` line as '' (not undefined), which would
+  // fail the enum. Treat empty/whitespace as unset so the default below applies.
+  LOG_LEVEL: z.preprocess(
+    (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
+    z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).optional(),
+  ),
 });
 
 export type AppConfig = {

@@ -50,3 +50,5 @@
 - [README.md](./README.md) — request/DI flow, module plugin architecture
 - [../docs/agent-prompts/README.md](../docs/agent-prompts/README.md) — prompt rules
 - [../TESTING.md](../TESTING.md) — hermetic vs integration split
+
+@INSIGHTS.md

@@ -43,3 +43,5 @@ Each module has its own `CLAUDE.md`. Run commands from inside the module dir.
 - [ONBOARDING.md](./ONBOARDING.md) — contributor quick-start, end-to-end walkthrough
 - [TESTING.md](./TESTING.md) — test strategy (hermetic vs. integration, CI path filters)
 - [docs/agent-prompts/README.md](./docs/agent-prompts/README.md) — prompt assembly rules, grounding gate
+
+@INSIGHTS.md

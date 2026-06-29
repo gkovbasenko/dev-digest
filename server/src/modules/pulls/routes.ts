@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull } from 'drizzle-orm';
 import type { PrMeta, PrDetail, GitHubClient, PrReviewComment } from '@devdigest/shared';
 import { PrCommentInput } from '@devdigest/shared';
 import * as t from '../../db/schema.js';
@@ -8,6 +8,7 @@ import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
 import { AppError, NotFoundError } from '../../platform/errors.js';
 import { deriveReviewStatus } from './status.js';
+import { estimateCost } from '../../adapters/llm/pricing.js';
 
 /**
  * F1 — pulls module. PR import via Octokit (list + per-PR detail).
@@ -129,6 +130,37 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
       }
     }
 
+    const latestRunCostByPr = new Map<string, number>();
+    if (prIds.length > 0) {
+      // DISTINCT ON (pr_id) ORDER BY pr_id, ran_at DESC — one row per PR (the latest
+      // completed run that has cost data). Filtering nulls in SQL avoids fetching all
+      // completed runs and sorting them in the application as run count grows.
+      // estimateCost is a pure dict lookup — must stay O(1)/no-I/O for this to be safe.
+      const runRows = await container.db
+        .selectDistinctOn([t.agentRuns.prId], {
+          prId: t.agentRuns.prId,
+          model: t.agentRuns.model,
+          tokensIn: t.agentRuns.tokensIn,
+          tokensOut: t.agentRuns.tokensOut,
+        })
+        .from(t.agentRuns)
+        .where(
+          and(
+            inArray(t.agentRuns.prId, prIds),
+            eq(t.agentRuns.status, 'done'),
+            isNotNull(t.agentRuns.model),
+            isNotNull(t.agentRuns.tokensIn),
+            isNotNull(t.agentRuns.tokensOut),
+          ),
+        )
+        .orderBy(t.agentRuns.prId, desc(t.agentRuns.ranAt));
+      for (const run of runRows) {
+        if (!run.prId || !run.model || run.tokensIn == null || run.tokensOut == null) continue;
+        const cost = estimateCost(run.model, run.tokensIn, run.tokensOut);
+        if (cost !== null) latestRunCostByPr.set(run.prId, cost);
+      }
+    }
+
     const now = Date.now();
     return rows.map((r) => {
       const review = latestReviewByPr.get(r.id);
@@ -153,6 +185,7 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
         opened_at: r.openedAt?.toISOString() ?? null,
         updated_at: r.updatedAt?.toISOString() ?? null,
         score: review ? review.score : null,
+        last_run_cost_usd: latestRunCostByPr.get(r.id) ?? null,
       };
     });
   });

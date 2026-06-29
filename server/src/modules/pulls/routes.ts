@@ -143,13 +143,13 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
         .where(and(inArray(t.agentRuns.prId, prIds), eq(t.agentRuns.status, 'done')))
         .orderBy(desc(t.agentRuns.ranAt));
       // estimateCost is a pure dict lookup — must stay O(1)/no-I/O for this loop to be safe.
+      // Skip runs with missing/unknown pricing so older runs can bubble up rather than
+      // locking in null for a PR that does have cost data on an earlier run.
       for (const run of runRows) {
         if (!run.prId || latestRunCostByPr.has(run.prId)) continue;
-        const cost =
-          run.model && run.tokensIn != null && run.tokensOut != null
-            ? estimateCost(run.model, run.tokensIn, run.tokensOut)
-            : null;
-        latestRunCostByPr.set(run.prId, cost);
+        if (!run.model || run.tokensIn == null || run.tokensOut == null) continue;
+        const cost = estimateCost(run.model, run.tokensIn, run.tokensOut);
+        if (cost !== null) latestRunCostByPr.set(run.prId, cost);
       }
     }
 

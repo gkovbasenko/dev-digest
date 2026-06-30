@@ -39,8 +39,9 @@ Concrete cues to act on the moment they happen:
 - The user corrected something non-obvious about how the system behaves.
 - You just left a `// NOTE:` / `// HACK:` / `// XXX:` comment in code — the *why* often belongs in INSIGHTS, not the comment.
 - A test, type, or build fails for a reason that surprised you.
+- A code reviewer (human or agent) flags a non-obvious behavior, constraint, or performance characteristic — if the finding is worth fixing, it's usually worth recording so future work doesn't repeat the same mistake.
 
-If the user has to ask *"did you record an insight?"*, the loop failed — treat that as a backstop, not the trigger.
+If the user has to ask *"did you record an insight?"*, the loop failed — treat that as a backstop, not the trigger. If it happens **twice in the same session**, update this skill.
 
 ## Where to write
 

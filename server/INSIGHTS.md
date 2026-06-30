@@ -5,6 +5,16 @@ Newest first. See `.claude/skills/engineering-insights/SKILL.md` for what belong
 
 ---
 
+## 2026-06-30 — PostgreSQL window functions scan all qualifying rows regardless of outer WHERE
+
+A `ROW_NUMBER() OVER (PARTITION BY ...)` CTE must evaluate every row that matches the base `WHERE` clause before the outer `WHERE rn <= N` filter is applied. This means selecting a large column (e.g. `rationale TEXT`) inside the CTE causes the DB to read it for *all* matching rows — not just the N that survive the outer filter. For a PR list with 50 PRs × 100 findings each, selecting `rationale` inside the CTE transfers ~500KB of text only to discard 95% of it.
+
+**How to apply:** when using `ROW_NUMBER()` to pick top-N per partition, exclude heavy columns from the CTE. After filtering, do a second batched query (`WHERE id IN (...)`) to fetch those columns for only the winners. See `server/src/modules/pulls/routes.ts` (top_findings two-phase query: CTE selects metadata only; post-filter IN-query fetches rationale).
+
+**Evidence:** `server/src/modules/pulls/routes.ts` (commits `c5bc7f5` two-phase split, `9175072` original CTE), flagged in PR #3 review at 70% confidence.
+
+---
+
 ## 2026-06-30 — A PR can have multiple `reviews` rows; latest-only aggregation hides findings
 
 Each agent run creates its own row in `reviews` (with its own findings via the `review_id` FK). Old reviews are **not** deleted when an agent re-runs or when a different agent runs. The PR detail page reflects this by rendering every review as a separate `ReviewRunAccordion`. So any per-PR aggregation that picks only the latest review (e.g., `ORDER BY created_at DESC LIMIT 1`) will silently mask findings from prior reviews — for example, if the newest review is an "approve / no findings" run.

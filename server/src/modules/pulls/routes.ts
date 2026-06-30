@@ -112,31 +112,28 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
       }
     }
 
-    // Latest-review SCORE + open-findings-by-severity per PR for the list row.
-    // Computed on read from reviews (no FK denorm); the list is small, so one
-    // IN-query + JS grouping for the latest review, then a single GROUP BY pass
-    // over its findings, is cheap. Dismissed findings are excluded so a triaged
-    // PR shows a clean breakdown.
+    // SCORE: from the latest review per PR (one number, most meaningful).
+    // FINDINGS: aggregated across ALL reviews on the PR — matches what the
+    // detail page shows (each agent run creates its own review record; old runs
+    // are not deleted on re-run, so the latest review alone can mask findings
+    // from prior runs). Dismissed findings are excluded.
     const prIds = rows.map((r) => r.id);
-    const latestReviewByPr = new Map<
-      string,
-      { reviewId: string; score: number | null }
-    >();
+    const latestReviewByPr = new Map<string, { score: number | null }>();
     if (prIds.length > 0) {
       const reviewRows = await container.db
-        .select({ id: t.reviews.id, prId: t.reviews.prId, score: t.reviews.score })
+        .select({ prId: t.reviews.prId, score: t.reviews.score })
         .from(t.reviews)
         .where(and(inArray(t.reviews.prId, prIds), eq(t.reviews.kind, 'review')))
         .orderBy(desc(t.reviews.createdAt));
       // Rows are newest-first → first seen per PR is the latest review.
       for (const rv of reviewRows) {
         if (!latestReviewByPr.has(rv.prId)) {
-          latestReviewByPr.set(rv.prId, { reviewId: rv.id, score: rv.score });
+          latestReviewByPr.set(rv.prId, { score: rv.score });
         }
       }
     }
 
-    const findingsBySeverityByReview = new Map<
+    const findingsBySeverityByPr = new Map<
       string,
       { CRITICAL: number; WARNING: number; SUGGESTION: number }
     >();
@@ -151,37 +148,43 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
       confidence: number;
       rationale_excerpt: string;
     };
-    const topFindingsByReview = new Map<string, TopFinding[]>();
-    const TOP_FINDINGS_PER_REVIEW = 5;
+    const topFindingsByPr = new Map<string, TopFinding[]>();
+    const TOP_FINDINGS_PER_PR = 5;
     const RATIONALE_EXCERPT_LEN = 200;
-    const latestReviewIds = Array.from(latestReviewByPr.values()).map((r) => r.reviewId);
-    if (latestReviewIds.length > 0) {
+    if (prIds.length > 0) {
+      // Aggregate by pr_id (joined via review_id → reviews.pr_id), excluding
+      // dismissed findings and non-review rows (e.g., kind='summary').
       const findingRows = await container.db
         .select({
-          reviewId: t.findings.reviewId,
+          prId: t.reviews.prId,
           severity: t.findings.severity,
           count: sql<number>`count(*)::int`,
         })
         .from(t.findings)
+        .innerJoin(t.reviews, eq(t.findings.reviewId, t.reviews.id))
         .where(
-          and(inArray(t.findings.reviewId, latestReviewIds), isNull(t.findings.dismissedAt)),
+          and(
+            inArray(t.reviews.prId, prIds),
+            eq(t.reviews.kind, 'review'),
+            isNull(t.findings.dismissedAt),
+          ),
         )
-        .groupBy(t.findings.reviewId, t.findings.severity);
+        .groupBy(t.reviews.prId, t.findings.severity);
       for (const f of findingRows) {
         const bucket =
-          findingsBySeverityByReview.get(f.reviewId) ??
+          findingsBySeverityByPr.get(f.prId) ??
           ({ CRITICAL: 0, WARNING: 0, SUGGESTION: 0 } as const);
         const next = { ...bucket };
         if (f.severity === 'CRITICAL' || f.severity === 'WARNING' || f.severity === 'SUGGESTION') {
           next[f.severity] = f.count;
         }
-        findingsBySeverityByReview.set(f.reviewId, next);
+        findingsBySeverityByPr.set(f.prId, next);
       }
 
       // Top finding rows for the hover preview (server-side ordering by severity
       // weight then file/line; rationale clipped before it leaves the API).
-      // ORDER BY uses a CASE so CRITICAL → WARNING → SUGGESTION; we then over-fetch
-      // (5 reviews × 5) and bucket per-review in JS — bounded and simple.
+      // ORDER BY uses a CASE so CRITICAL → WARNING → SUGGESTION; we bucket per
+      // PR in JS and cap at TOP_FINDINGS_PER_PR.
       const sevOrder = sql`case ${t.findings.severity}
         when 'CRITICAL' then 0
         when 'WARNING' then 1
@@ -190,7 +193,7 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
       const topRows = await container.db
         .select({
           id: t.findings.id,
-          reviewId: t.findings.reviewId,
+          prId: t.reviews.prId,
           severity: t.findings.severity,
           category: t.findings.category,
           title: t.findings.title,
@@ -201,16 +204,21 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
           rationale: t.findings.rationale,
         })
         .from(t.findings)
+        .innerJoin(t.reviews, eq(t.findings.reviewId, t.reviews.id))
         .where(
-          and(inArray(t.findings.reviewId, latestReviewIds), isNull(t.findings.dismissedAt)),
+          and(
+            inArray(t.reviews.prId, prIds),
+            eq(t.reviews.kind, 'review'),
+            isNull(t.findings.dismissedAt),
+          ),
         )
         .orderBy(sevOrder, t.findings.file, t.findings.startLine);
       for (const f of topRows) {
         if (f.severity !== 'CRITICAL' && f.severity !== 'WARNING' && f.severity !== 'SUGGESTION') {
           continue;
         }
-        const list = topFindingsByReview.get(f.reviewId) ?? [];
-        if (list.length >= TOP_FINDINGS_PER_REVIEW) continue;
+        const list = topFindingsByPr.get(f.prId) ?? [];
+        if (list.length >= TOP_FINDINGS_PER_PR) continue;
         const excerpt =
           f.rationale.length > RATIONALE_EXCERPT_LEN
             ? f.rationale.slice(0, RATIONALE_EXCERPT_LEN).trimEnd() + '…'
@@ -226,7 +234,7 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
           confidence: f.confidence,
           rationale_excerpt: excerpt,
         });
-        topFindingsByReview.set(f.reviewId, list);
+        topFindingsByPr.set(f.prId, list);
       }
     }
 
@@ -287,13 +295,13 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
         score: review ? review.score : null,
         last_run_cost_usd: latestRunCostByPr.get(r.id) ?? null,
         findings_by_severity: review
-          ? findingsBySeverityByReview.get(review.reviewId) ?? {
+          ? findingsBySeverityByPr.get(r.id) ?? {
               CRITICAL: 0,
               WARNING: 0,
               SUGGESTION: 0,
             }
           : null,
-        top_findings: review ? topFindingsByReview.get(review.reviewId) ?? [] : null,
+        top_findings: review ? topFindingsByPr.get(r.id) ?? [] : null,
       };
     });
   });

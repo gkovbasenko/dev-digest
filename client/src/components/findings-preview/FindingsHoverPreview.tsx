@@ -54,12 +54,15 @@ export function FindingsHoverPreview({
   totalCount,
   headerLabel,
   emptyLabel,
+  moreLabel = "Open the PR to see all findings",
 }: {
   children: React.ReactNode;
   findings: PreviewFinding[];
   totalCount: number;
   headerLabel: string;
   emptyLabel?: string;
+  /** "Open the PR to see all findings" — shown when totalCount > findings.length. */
+  moreLabel?: string;
 }) {
   const [open, setOpen] = React.useState(false);
   const [coords, setCoords] = React.useState<{ top: number; left: number } | null>(null);
@@ -115,7 +118,8 @@ export function FindingsHoverPreview({
             {findings.length === 0 ? (
               <div style={s.emptyHint}>{emptyLabel ?? null}</div>
             ) : (
-              findings.map((f, i) => {
+              <>
+              {findings.map((f, i) => {
                 const sev = SEV_ICON[f.severity];
                 const SevI = Icon[sev.icon];
                 const catName = CATEGORY_ICON[f.category];
@@ -161,7 +165,13 @@ export function FindingsHoverPreview({
                     )}
                   </div>
                 );
-              })
+              })}
+              {totalCount > findings.length && (
+                <div style={s.moreRow}>
+                  +{totalCount - findings.length} more — {moreLabel}
+                </div>
+              )}
+              </>
             )}
           </div>,
           document.body,

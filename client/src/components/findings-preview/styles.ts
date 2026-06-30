@@ -95,4 +95,12 @@ export const s = {
     lineHeight: 1.4,
   } satisfies CSSProperties,
   emptyHint: { fontSize: 12, color: "var(--text-muted)" } satisfies CSSProperties,
+  moreRow: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTop: "1px solid var(--border)",
+    fontSize: 12,
+    color: "var(--text-muted)",
+    fontStyle: "italic",
+  } satisfies CSSProperties,
 } as const;

@@ -172,6 +172,36 @@ export const PrMeta = z.object({
   score: z.number().int().nullish(),
   // USD cost of the last completed run (null/absent until a run finishes).
   last_run_cost_usd: z.number().nullish(),
+  // Open (non-dismissed) findings on the PR aggregated across ALL reviews
+  // (each agent run creates its own review record; old runs aren't deleted on
+  // re-run, so latest-only would mask findings). Absent until the PR has any
+  // review.
+  findings_by_severity: z
+    .object({
+      CRITICAL: z.number().int(),
+      WARNING: z.number().int(),
+      SUGGESTION: z.number().int(),
+    })
+    .nullish(),
+  // Up to 5 open findings across all the PR's reviews for the row's hover
+  // preview, ordered CRIT → WARN → SUGG then file/line. Rationale is truncated
+  // server-side to keep the list payload small. Absent until the PR has any
+  // review.
+  top_findings: z
+    .array(
+      z.object({
+        id: z.string(),
+        severity: z.enum(['CRITICAL', 'WARNING', 'SUGGESTION']),
+        category: z.string(),
+        title: z.string(),
+        file: z.string(),
+        start_line: z.number().int(),
+        end_line: z.number().int(),
+        confidence: z.number(),
+        rationale_excerpt: z.string(),
+      }),
+    )
+    .nullish(),
 });
 export type PrMeta = z.infer<typeof PrMeta>;
 

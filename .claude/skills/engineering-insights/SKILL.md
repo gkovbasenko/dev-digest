@@ -27,6 +27,21 @@ Good triggers:
 - Volatile facts (current sprint, who's on call, latest counts).
 - Generic best practices — those belong in skills.
 
+## When to write (timing)
+
+Capture in the **same turn as the discovery**, before the next task. Don't batch for "end of session" — context and certainty erode fast, and a deferred insight is usually a forgotten one.
+
+Concrete cues to act on the moment they happen:
+
+- You diagnosed a bug whose root cause wasn't visible from the code (hidden invariant, framework quirk, env-dependent behaviour).
+- You wrote a workaround (portal, retry, fallback, escape hatch) to dodge an environmental constraint that will bite the next person too.
+- You backtracked from a wrong design assumption — yours or the user's prior.
+- The user corrected something non-obvious about how the system behaves.
+- You just left a `// NOTE:` / `// HACK:` / `// XXX:` comment in code — the *why* often belongs in INSIGHTS, not the comment.
+- A test, type, or build fails for a reason that surprised you.
+
+If the user has to ask *"did you record an insight?"*, the loop failed — treat that as a backstop, not the trigger.
+
 ## Where to write
 
 Choose the most specific module:

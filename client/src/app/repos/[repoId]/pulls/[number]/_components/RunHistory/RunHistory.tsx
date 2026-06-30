@@ -4,6 +4,18 @@ import React from "react";
 import { useTranslations } from "next-intl";
 import { Badge, Icon, CircularScore, type IconName } from "@devdigest/ui";
 import type { RunSummary, PrCommit } from "@devdigest/shared";
+import {
+  FindingsHoverPreview,
+  SeverityChips,
+  type PreviewFinding,
+  type SeverityCounts,
+} from "@/components/findings-preview";
+
+/** Per-run preview data: severity counts + the top-5 finding rows for the popover. */
+export interface RunPreview {
+  counts: SeverityCounts;
+  top: PreviewFinding[];
+}
 
 /**
  * PR timeline — every agent run interleaved with the PR's commits, newest-first
@@ -87,12 +99,15 @@ function tsOf(s: string | null | undefined): number {
 export function RunHistory({
   runs,
   commits = [],
+  previewByRunId,
   onOpenTrace,
   onGoToReview,
   onDelete,
 }: {
   runs: RunSummary[];
   commits?: PrCommit[];
+  /** Per-run severity counts + top-5 finding preview, used by the hover popover. */
+  previewByRunId?: Map<string, RunPreview>;
   /** Open the trace + log drawer for a run (the logs icon). */
   onOpenTrace: (runId: string) => void;
   /** Jump to this run's inline review accordion below (clicking the agent name). */
@@ -188,12 +203,45 @@ export function RunHistory({
                   {r.error}
                 </div>
               )}
-              {settled && (
-                <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                  {t("runStatus.findings", { count: r.findings_count ?? 0 })}
-                  {(r.blockers ?? 0) > 0 ? t("runStatus.blockers", { count: r.blockers ?? 0 }) : ""}
-                </div>
-              )}
+              {settled && (() => {
+                const preview = previewByRunId?.get(r.run_id);
+                const total = preview
+                  ? preview.counts.CRITICAL + preview.counts.WARNING + preview.counts.SUGGESTION
+                  : r.findings_count ?? 0;
+                const blockers = r.blockers ?? 0;
+                if (total === 0) {
+                  return (
+                    <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                      {t("runStatus.findings", { count: 0 })}
+                    </div>
+                  );
+                }
+                return (
+                  <div
+                    style={{ display: "flex", alignItems: "center", gap: 10 }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {preview ? (
+                      <FindingsHoverPreview
+                        findings={preview.top}
+                        totalCount={total}
+                        headerLabel={t("timeline.findingsHoverHeader", { count: total })}
+                      >
+                        <SeverityChips counts={preview.counts} />
+                      </FindingsHoverPreview>
+                    ) : (
+                      <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                        {t("runStatus.findings", { count: total })}
+                      </span>
+                    )}
+                    {blockers > 0 && (
+                      <span style={{ fontSize: 12, color: "var(--crit)" }}>
+                        {t("runStatus.blockers", { count: blockers }).replace(/^ · /, "")}
+                      </span>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
             <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2, fontSize: 11, color: "var(--text-muted)", flexShrink: 0 }}>
               {r.ran_at && <span>{new Date(r.ran_at).toLocaleTimeString()}</span>}

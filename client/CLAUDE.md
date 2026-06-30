@@ -33,6 +33,7 @@
 - UI primitives come from `src/vendor/ui` — don't add new primitives outside it.
 - Server vs Client components: default to RSC; add `"use client"` only when needed (state, effects, browser APIs).
 - Translation keys must mirror across every locale file under `src/i18n/messages/`.
+- Tests use `fireEvent` from `@testing-library/react` — `@testing-library/user-event` is **not** installed, don't import it.
 
 ## Gotchas
 
@@ -48,3 +49,5 @@
 
 - [README.md](./README.md) — route map, stack overview
 - [../ONBOARDING.md](../ONBOARDING.md) — end-to-end walkthrough
+
+@INSIGHTS.md

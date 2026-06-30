@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, within, fireEvent } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
-import type { FindingRecord } from "@devdigest/shared";
+import type { FindingRecord, Severity } from "@devdigest/shared";
 import messages from "../../../../../../../../messages/en/prReview.json";
 
 vi.mock("../../../../../../../lib/hooks/reviews", () => ({
@@ -12,16 +12,16 @@ import { FindingsPanel } from "./FindingsPanel";
 
 afterEach(cleanup);
 
-const FINDINGS: FindingRecord[] = [
-  {
-    id: "f1",
-    severity: "CRITICAL",
+function makeFinding(id: string, severity: Severity, title: string): FindingRecord {
+  return {
+    id,
+    severity,
     category: "security",
-    title: "Hardcoded secret",
+    title,
     file: "src/config.ts",
     start_line: 11,
     end_line: 11,
-    rationale: "A secret is committed.",
+    rationale: "Some reason.",
     suggestion: null,
     confidence: 0.95,
     kind: "finding",
@@ -30,7 +30,14 @@ const FINDINGS: FindingRecord[] = [
     review_id: "r1",
     accepted_at: null,
     dismissed_at: null,
-  },
+  };
+}
+
+const FINDINGS: FindingRecord[] = [
+  makeFinding("c1", "CRITICAL", "Hardcoded secret"),
+  makeFinding("c2", "CRITICAL", "SQL injection"),
+  makeFinding("w1", "WARNING", "Missing error handling"),
+  makeFinding("s1", "SUGGESTION", "Rename helper"),
 ];
 
 function renderWithIntl(ui: React.ReactElement) {
@@ -43,7 +50,7 @@ function renderWithIntl(ui: React.ReactElement) {
 
 describe("FindingsPanel (smoke)", () => {
   it("renders the toolbar + a finding card", () => {
-    renderWithIntl(<FindingsPanel findings={FINDINGS} prId="pr1" />);
+    renderWithIntl(<FindingsPanel findings={[FINDINGS[0]!]} prId="pr1" />);
     expect(screen.getByText("Hide low confidence")).toBeInTheDocument();
     expect(screen.getByText("Hardcoded secret")).toBeInTheDocument();
   });
@@ -51,5 +58,48 @@ describe("FindingsPanel (smoke)", () => {
   it("shows the empty state when nothing matches", () => {
     renderWithIntl(<FindingsPanel findings={[]} prId="pr1" />);
     expect(screen.getByText("No findings match")).toBeInTheDocument();
+  });
+});
+
+describe("FindingsPanel — severity counters", () => {
+  function findChip(label: "CRITICAL" | "WARNING" | "SUGGESTION") {
+    return screen.getByRole("button", { name: new RegExp(`\\b${label}\\b`) });
+  }
+
+  it("renders one counter per severity bucket with correct counts", () => {
+    renderWithIntl(<FindingsPanel findings={FINDINGS} prId="pr1" />);
+    const crit = findChip("CRITICAL");
+    const warn = findChip("WARNING");
+    const sugg = findChip("SUGGESTION");
+    expect(within(crit).getByText("2")).toBeInTheDocument();
+    expect(within(warn).getByText("1")).toBeInTheDocument();
+    expect(within(sugg).getByText("1")).toBeInTheDocument();
+  });
+
+  it("filters findings to the clicked severity, and toggling off restores all", () => {
+    renderWithIntl(<FindingsPanel findings={FINDINGS} prId="pr1" />);
+
+    expect(screen.getByText("Hardcoded secret")).toBeInTheDocument();
+    expect(screen.getByText("Missing error handling")).toBeInTheDocument();
+    expect(screen.getByText("Rename helper")).toBeInTheDocument();
+
+    fireEvent.click(findChip("CRITICAL"));
+    expect(screen.getByText("Hardcoded secret")).toBeInTheDocument();
+    expect(screen.getByText("SQL injection")).toBeInTheDocument();
+    expect(screen.queryByText("Missing error handling")).not.toBeInTheDocument();
+    expect(screen.queryByText("Rename helper")).not.toBeInTheDocument();
+    expect(findChip("CRITICAL")).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.click(findChip("CRITICAL"));
+    expect(screen.getByText("Missing error handling")).toBeInTheDocument();
+    expect(screen.getByText("Rename helper")).toBeInTheDocument();
+    expect(findChip("CRITICAL")).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("disables a counter that has zero findings", () => {
+    renderWithIntl(<FindingsPanel findings={[FINDINGS[0]!]} prId="pr1" />);
+    expect(findChip("WARNING")).toBeDisabled();
+    expect(findChip("SUGGESTION")).toBeDisabled();
+    expect(findChip("CRITICAL")).not.toBeDisabled();
   });
 });

@@ -34,10 +34,13 @@ function run(o: Partial<RunSummary>): RunSummary {
   };
 }
 
-function renderRuns(runs: RunSummary[]) {
+function renderRuns(
+  runs: RunSummary[],
+  previewByRunId?: Map<string, import("./RunHistory").RunPreview>,
+) {
   return render(
     <NextIntlClientProvider locale="en" messages={{ prReview: messages }}>
-      <RunHistory runs={runs} onOpenTrace={() => {}} />
+      <RunHistory runs={runs} previewByRunId={previewByRunId} onOpenTrace={() => {}} />
     </NextIntlClientProvider>,
   );
 }
@@ -71,5 +74,25 @@ describe("RunHistory — outcome badge", () => {
   it("a running run reads 'running'", () => {
     renderRuns([run({ status: "running", score: null, blockers: null })]);
     expect(screen.getByText("running")).toBeInTheDocument();
+  });
+
+  it("renders severity chips for a settled run when a preview map is provided", () => {
+    const preview = new Map([
+      [
+        "run-1",
+        {
+          counts: { CRITICAL: 2, WARNING: 1, SUGGESTION: 0 },
+          top: [],
+        },
+      ],
+    ]);
+    renderRuns(
+      [run({ status: "done", findings_count: 3, blockers: 2, score: 38 })],
+      preview,
+    );
+    expect(screen.getByText("2")).toBeInTheDocument();
+    expect(screen.getByText("1")).toBeInTheDocument();
+    // Old "N finding(s)" text is replaced by chips.
+    expect(screen.queryByText("3 finding(s)")).not.toBeInTheDocument();
   });
 });

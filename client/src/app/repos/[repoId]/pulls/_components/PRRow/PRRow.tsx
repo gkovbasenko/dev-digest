@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Icon, Avatar, Badge, CircularScore } from "@devdigest/ui";
 import type { PrMeta } from "@/lib/types";
+import { FindingsHoverPreview, SeverityChips } from "@/components/findings-preview";
 import { SIZE_COLOR, STATUS_META } from "../../constants";
 import { formatCost, relativeTime, sizeOf } from "../../helpers";
 import { s } from "../../styles";
@@ -17,6 +18,8 @@ export function PRRow({ pr, repoId }: { pr: PrMeta; repoId: string }) {
   const st = STATUS_META[pr.status] ?? STATUS_META.needs_review!;
   const { size, lines } = sizeOf(pr);
   const reviewed = pr.score != null; // null score ⇒ PR has never been reviewed
+  const sev = pr.findings_by_severity;
+  const totalFindings = sev ? sev.CRITICAL + sev.WARNING + sev.SUGGESTION : 0;
   return (
     <div
       onMouseEnter={() => setH(true)}
@@ -49,6 +52,24 @@ export function PRRow({ pr, repoId }: { pr: PrMeta; repoId: string }) {
       <div style={s.scoreCell}>
         {reviewed ? (
           <CircularScore score={pr.score!} size={34} stroke={3} />
+        ) : (
+          <span style={s.muted}>—</span>
+        )}
+      </div>
+      <div
+        style={s.findingsCell}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {sev && totalFindings > 0 ? (
+          <FindingsHoverPreview
+            findings={pr.top_findings ?? []}
+            totalCount={totalFindings}
+            headerLabel={t("list.findingsHoverHeader", { count: totalFindings })}
+          >
+            <SeverityChips counts={sev} />
+          </FindingsHoverPreview>
+        ) : reviewed ? (
+          <Icon.CheckCircle size={15} style={s.findingsClean} />
         ) : (
           <span style={s.muted}>—</span>
         )}

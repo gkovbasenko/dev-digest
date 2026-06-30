@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
-import { and, desc, eq, inArray, isNotNull } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import type { PrMeta, PrDetail, GitHubClient, PrReviewComment } from '@devdigest/shared';
 import { PrCommentInput } from '@devdigest/shared';
 import * as t from '../../db/schema.js';
@@ -8,6 +8,7 @@ import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
 import { AppError, NotFoundError } from '../../platform/errors.js';
 import { deriveReviewStatus } from './status.js';
+import { excerptRationale, RATIONALE_EXCERPT_LEN } from './helpers.js';
 import { estimateCost } from '../../adapters/llm/pricing.js';
 
 /**
@@ -112,10 +113,11 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
       }
     }
 
-    // Latest-review SCORE per PR for the list's score ring. Computed on read
-    // from reviews (no FK denorm); the list is small, so one IN-query + JS
-    // grouping is cheap. (The per-severity FINDINGS breakdown is intentionally
-    // not surfaced on the list — findings live on the PR detail page.)
+    // SCORE: from the latest review per PR (one number, most meaningful).
+    // FINDINGS: aggregated across ALL reviews on the PR — matches what the
+    // detail page shows (each agent run creates its own review record; old runs
+    // are not deleted on re-run, so the latest review alone can mask findings
+    // from prior runs). Dismissed findings are excluded.
     const prIds = rows.map((r) => r.id);
     const latestReviewByPr = new Map<string, { score: number | null }>();
     if (prIds.length > 0) {
@@ -126,7 +128,139 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
         .orderBy(desc(t.reviews.createdAt));
       // Rows are newest-first → first seen per PR is the latest review.
       for (const rv of reviewRows) {
-        if (!latestReviewByPr.has(rv.prId)) latestReviewByPr.set(rv.prId, { score: rv.score });
+        if (!latestReviewByPr.has(rv.prId)) {
+          latestReviewByPr.set(rv.prId, { score: rv.score });
+        }
+      }
+    }
+
+    const findingsBySeverityByPr = new Map<
+      string,
+      { CRITICAL: number; WARNING: number; SUGGESTION: number }
+    >();
+    type TopFinding = {
+      id: string;
+      severity: 'CRITICAL' | 'WARNING' | 'SUGGESTION';
+      category: string;
+      title: string;
+      file: string;
+      start_line: number;
+      end_line: number;
+      confidence: number;
+      rationale_excerpt: string;
+    };
+    const topFindingsByPr = new Map<string, TopFinding[]>();
+    const TOP_FINDINGS_PER_PR = 5;
+    if (latestReviewByPr.size > 0) {
+      // Aggregate by pr_id (joined via review_id → reviews.pr_id), excluding
+      // dismissed findings and non-review rows (e.g., kind='summary').
+      const findingRows = await container.db
+        .select({
+          prId: t.reviews.prId,
+          severity: t.findings.severity,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(t.findings)
+        .innerJoin(t.reviews, eq(t.findings.reviewId, t.reviews.id))
+        .where(
+          and(
+            inArray(t.reviews.prId, prIds),
+            eq(t.reviews.kind, 'review'),
+            isNull(t.findings.dismissedAt),
+          ),
+        )
+        .groupBy(t.reviews.prId, t.findings.severity);
+      for (const f of findingRows) {
+        const bucket =
+          findingsBySeverityByPr.get(f.prId) ??
+          ({ CRITICAL: 0, WARNING: 0, SUGGESTION: 0 } as const);
+        const next = { ...bucket };
+        if (f.severity === 'CRITICAL' || f.severity === 'WARNING' || f.severity === 'SUGGESTION') {
+          next[f.severity] = f.count;
+        }
+        findingsBySeverityByPr.set(f.prId, next);
+      }
+
+      // Top finding rows for the hover preview.
+      // Phase 1: ROW_NUMBER() CTE without rationale — avoids reading the
+      // potentially-long text column for rows that will be discarded by the
+      // window filter. Only id/metadata is transferred for all candidates.
+      const sevOrderExpr = sql`case ${t.findings.severity}
+        when 'CRITICAL' then 0
+        when 'WARNING' then 1
+        when 'SUGGESTION' then 2
+        else 3 end`;
+      const ranked = container.db.$with('top_findings_ranked').as(
+        container.db
+          .select({
+            id: t.findings.id,
+            prId: t.reviews.prId,
+            severity: t.findings.severity,
+            category: t.findings.category,
+            title: t.findings.title,
+            file: t.findings.file,
+            startLine: t.findings.startLine,
+            endLine: t.findings.endLine,
+            confidence: t.findings.confidence,
+            rn: sql<number>`ROW_NUMBER() OVER (
+              PARTITION BY ${t.reviews.prId}
+              ORDER BY ${sevOrderExpr}, ${t.findings.file}, ${t.findings.startLine}
+            )`.as('rn'),
+          })
+          .from(t.findings)
+          .innerJoin(t.reviews, eq(t.findings.reviewId, t.reviews.id))
+          .where(
+            and(
+              inArray(t.reviews.prId, prIds),
+              eq(t.reviews.kind, 'review'),
+              isNull(t.findings.dismissedAt),
+            ),
+          ),
+      );
+      const topRows = await container.db
+        .with(ranked)
+        .select({
+          id: ranked.id,
+          prId: ranked.prId,
+          severity: ranked.severity,
+          category: ranked.category,
+          title: ranked.title,
+          file: ranked.file,
+          startLine: ranked.startLine,
+          endLine: ranked.endLine,
+          confidence: ranked.confidence,
+        })
+        .from(ranked)
+        .where(sql`${ranked.rn} <= ${TOP_FINDINGS_PER_PR}`);
+
+      // Phase 2: fetch rationale only for the winning top-5 finding IDs.
+      const topIds = topRows.map((r) => r.id);
+      const rationaleMap = new Map<string, string>();
+      if (topIds.length > 0) {
+        const rationaleRows = await container.db
+          .select({ id: t.findings.id, rationale: t.findings.rationale })
+          .from(t.findings)
+          .where(inArray(t.findings.id, topIds));
+        for (const r of rationaleRows) rationaleMap.set(r.id, r.rationale);
+      }
+
+      for (const f of topRows) {
+        if (f.severity !== 'CRITICAL' && f.severity !== 'WARNING' && f.severity !== 'SUGGESTION') {
+          continue;
+        }
+        const list = topFindingsByPr.get(f.prId) ?? [];
+        list.push({
+          id: f.id,
+          severity: f.severity,
+          category: f.category,
+          title: f.title,
+          file: f.file,
+          start_line: f.startLine,
+          end_line: f.endLine,
+          confidence: f.confidence,
+          rationale_excerpt: excerptRationale(rationaleMap.get(f.id) ?? ''),
+        });
+        topFindingsByPr.set(f.prId, list);
       }
     }
 
@@ -186,6 +320,14 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
         updated_at: r.updatedAt?.toISOString() ?? null,
         score: review ? review.score : null,
         last_run_cost_usd: latestRunCostByPr.get(r.id) ?? null,
+        findings_by_severity: review
+          ? findingsBySeverityByPr.get(r.id) ?? {
+              CRITICAL: 0,
+              WARNING: 0,
+              SUGGESTION: 0,
+            }
+          : null,
+        top_findings: review ? topFindingsByPr.get(r.id) ?? [] : null,
       };
     });
   });

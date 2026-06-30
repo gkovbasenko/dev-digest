@@ -151,7 +151,7 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
     };
     const topFindingsByPr = new Map<string, TopFinding[]>();
     const TOP_FINDINGS_PER_PR = 5;
-    if (prIds.length > 0) {
+    if (latestReviewByPr.size > 0) {
       // Aggregate by pr_id (joined via review_id → reviews.pr_id), excluding
       // dismissed findings and non-review rows (e.g., kind='summary').
       const findingRows = await container.db

@@ -7,6 +7,7 @@ import { RunHistory } from "../RunHistory/RunHistory";
 import { ReviewRunAccordion } from "../ReviewRunAccordion";
 import { s } from "./styles";
 import type { FindingRecord, ReviewRecord, RunSummary, PrCommit } from "@devdigest/shared";
+import { buildRunPreviewMap } from "./runFindingsPreview";
 import type { UseMutationResult } from "@tanstack/react-query";
 
 interface FindingsTabProps {
@@ -71,6 +72,10 @@ export function FindingsTab({
     setTarget((p) => ({ runId, n: (p?.n ?? 0) + 1 }));
   }, []);
 
+  // Per-run severity counts + top-5 findings, keyed by run_id, derived from the
+  // already-loaded reviews so the timeline hover popover needs no extra fetch.
+  const runPreviewMap = React.useMemo(() => buildRunPreviewMap(runs), [runs]);
+
   return (
     <section>
       {liveRunIds.length > 0 && (
@@ -131,6 +136,7 @@ export function FindingsTab({
           <RunHistory
             runs={prRuns ?? []}
             commits={prCommits}
+            previewByRunId={runPreviewMap}
             onOpenTrace={handleOpenTrace}
             onGoToReview={handleGoToReview}
             onDelete={handleDelete}

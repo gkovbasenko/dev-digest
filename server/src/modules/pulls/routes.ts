@@ -181,44 +181,63 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
         findingsBySeverityByPr.set(f.prId, next);
       }
 
-      // Top finding rows for the hover preview (server-side ordering by severity
-      // weight then file/line; rationale clipped before it leaves the API).
-      // ORDER BY uses a CASE so CRITICAL → WARNING → SUGGESTION; we bucket per
-      // PR in JS and cap at TOP_FINDINGS_PER_PR.
-      const sevOrder = sql`case ${t.findings.severity}
+      // Top finding rows for the hover preview. ROW_NUMBER() OVER (PARTITION BY
+      // pr_id) limits to TOP_FINDINGS_PER_PR rows per PR at DB level so the
+      // driver never transfers discarded rows regardless of total findings volume.
+      const sevOrderExpr = sql`case ${t.findings.severity}
         when 'CRITICAL' then 0
         when 'WARNING' then 1
         when 'SUGGESTION' then 2
         else 3 end`;
-      const topRows = await container.db
-        .select({
-          id: t.findings.id,
-          prId: t.reviews.prId,
-          severity: t.findings.severity,
-          category: t.findings.category,
-          title: t.findings.title,
-          file: t.findings.file,
-          startLine: t.findings.startLine,
-          endLine: t.findings.endLine,
-          confidence: t.findings.confidence,
-          rationale: t.findings.rationale,
-        })
-        .from(t.findings)
-        .innerJoin(t.reviews, eq(t.findings.reviewId, t.reviews.id))
-        .where(
-          and(
-            inArray(t.reviews.prId, prIds),
-            eq(t.reviews.kind, 'review'),
-            isNull(t.findings.dismissedAt),
+      const ranked = container.db.$with('top_findings_ranked').as(
+        container.db
+          .select({
+            id: t.findings.id,
+            prId: t.reviews.prId,
+            severity: t.findings.severity,
+            category: t.findings.category,
+            title: t.findings.title,
+            file: t.findings.file,
+            startLine: t.findings.startLine,
+            endLine: t.findings.endLine,
+            confidence: t.findings.confidence,
+            rationale: t.findings.rationale,
+            rn: sql<number>`ROW_NUMBER() OVER (
+              PARTITION BY ${t.reviews.prId}
+              ORDER BY ${sevOrderExpr}, ${t.findings.file}, ${t.findings.startLine}
+            )`.as('rn'),
+          })
+          .from(t.findings)
+          .innerJoin(t.reviews, eq(t.findings.reviewId, t.reviews.id))
+          .where(
+            and(
+              inArray(t.reviews.prId, prIds),
+              eq(t.reviews.kind, 'review'),
+              isNull(t.findings.dismissedAt),
+            ),
           ),
-        )
-        .orderBy(sevOrder, t.findings.file, t.findings.startLine);
+      );
+      const topRows = await container.db
+        .with(ranked)
+        .select({
+          id: ranked.id,
+          prId: ranked.prId,
+          severity: ranked.severity,
+          category: ranked.category,
+          title: ranked.title,
+          file: ranked.file,
+          startLine: ranked.startLine,
+          endLine: ranked.endLine,
+          confidence: ranked.confidence,
+          rationale: ranked.rationale,
+        })
+        .from(ranked)
+        .where(sql`${ranked.rn} <= ${TOP_FINDINGS_PER_PR}`);
       for (const f of topRows) {
         if (f.severity !== 'CRITICAL' && f.severity !== 'WARNING' && f.severity !== 'SUGGESTION') {
           continue;
         }
         const list = topFindingsByPr.get(f.prId) ?? [];
-        if (list.length >= TOP_FINDINGS_PER_PR) continue;
         const excerpt =
           f.rationale.length > RATIONALE_EXCERPT_LEN
             ? f.rationale.slice(0, RATIONALE_EXCERPT_LEN).trimEnd() + '…'

@@ -181,9 +181,10 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
         findingsBySeverityByPr.set(f.prId, next);
       }
 
-      // Top finding rows for the hover preview. ROW_NUMBER() OVER (PARTITION BY
-      // pr_id) limits to TOP_FINDINGS_PER_PR rows per PR at DB level so the
-      // driver never transfers discarded rows regardless of total findings volume.
+      // Top finding rows for the hover preview.
+      // Phase 1: ROW_NUMBER() CTE without rationale — avoids reading the
+      // potentially-long text column for rows that will be discarded by the
+      // window filter. Only id/metadata is transferred for all candidates.
       const sevOrderExpr = sql`case ${t.findings.severity}
         when 'CRITICAL' then 0
         when 'WARNING' then 1
@@ -201,7 +202,6 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
             startLine: t.findings.startLine,
             endLine: t.findings.endLine,
             confidence: t.findings.confidence,
-            rationale: t.findings.rationale,
             rn: sql<number>`ROW_NUMBER() OVER (
               PARTITION BY ${t.reviews.prId}
               ORDER BY ${sevOrderExpr}, ${t.findings.file}, ${t.findings.startLine}
@@ -229,16 +229,26 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
           startLine: ranked.startLine,
           endLine: ranked.endLine,
           confidence: ranked.confidence,
-          rationale: ranked.rationale,
         })
         .from(ranked)
         .where(sql`${ranked.rn} <= ${TOP_FINDINGS_PER_PR}`);
+
+      // Phase 2: fetch rationale only for the winning top-5 finding IDs.
+      const topIds = topRows.map((r) => r.id);
+      const rationaleMap = new Map<string, string>();
+      if (topIds.length > 0) {
+        const rationaleRows = await container.db
+          .select({ id: t.findings.id, rationale: t.findings.rationale })
+          .from(t.findings)
+          .where(inArray(t.findings.id, topIds));
+        for (const r of rationaleRows) rationaleMap.set(r.id, r.rationale);
+      }
+
       for (const f of topRows) {
         if (f.severity !== 'CRITICAL' && f.severity !== 'WARNING' && f.severity !== 'SUGGESTION') {
           continue;
         }
         const list = topFindingsByPr.get(f.prId) ?? [];
-        const excerpt = excerptRationale(f.rationale);
         list.push({
           id: f.id,
           severity: f.severity,
@@ -248,7 +258,7 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
           start_line: f.startLine,
           end_line: f.endLine,
           confidence: f.confidence,
-          rationale_excerpt: excerpt,
+          rationale_excerpt: excerptRationale(rationaleMap.get(f.id) ?? ''),
         });
         topFindingsByPr.set(f.prId, list);
       }

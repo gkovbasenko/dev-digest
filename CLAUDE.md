@@ -24,7 +24,7 @@ Each module has its own `CLAUDE.md`. Run commands from inside the module dir.
 - **Not a workspace.** Cross-module wiring is via tsconfig path aliases; each module has its own lockfile. `pnpm-workspace.yaml` files in `client/`/`server/` are not a monorepo setup.
 - **Server consumes `reviewer-core` as `.ts` source** via tsx/vitest. No dist.
 - **DI container** at `server/src/platform/container.ts` is the only way to reach adapters.
-- **Skills live at `.claude/skills/`** and are LAZY-loaded — don't inline their content here.
+- **Skills live at `.claude/skills/`** and are LAZY-loaded — don't inline their content here. Exception: `engineering-insights` is always-loaded (imported below) so insight capture is active every session without needing to invoke the skill explicitly.
 
 ## Gotchas
 
@@ -45,3 +45,4 @@ Each module has its own `CLAUDE.md`. Run commands from inside the module dir.
 - [docs/agent-prompts/README.md](./docs/agent-prompts/README.md) — prompt assembly rules, grounding gate
 
 @INSIGHTS.md
+@.claude/skills/engineering-insights/SKILL.md

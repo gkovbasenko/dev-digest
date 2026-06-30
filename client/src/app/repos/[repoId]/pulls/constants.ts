@@ -23,13 +23,6 @@ export const SIZE_COLOR: Record<string, string> = {
   L: "var(--crit)",
 };
 
-/** Severity buckets rendered in the row's tiny `2 · 3 · 1` chip group (CRIT/WARN/SUGG). */
-export const SEV_CHIP_BUCKETS: readonly { key: "CRITICAL" | "WARNING" | "SUGGESTION"; color: string }[] = [
-  { key: "CRITICAL", color: "var(--crit)" },
-  { key: "WARNING", color: "var(--warn)" },
-  { key: "SUGGESTION", color: "var(--sugg)" },
-] as const;
-
 /** Grid template for both the header row and PR rows. */
 export const GRID = "1fr 132px 92px 60px 130px 72px 118px 78px";
 

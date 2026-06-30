@@ -30,7 +30,7 @@ export function buildRunPreviewMap(reviews: ReviewRecord[]): Map<string, RunPrev
         const sa = SEV_WEIGHT[a.severity] ?? 9;
         const sb = SEV_WEIGHT[b.severity] ?? 9;
         if (sa !== sb) return sa - sb;
-        if (a.file !== b.file) return a.file.localeCompare(b.file);
+        if (a.file !== b.file) return a.file < b.file ? -1 : 1;
         return a.start_line - b.start_line;
       });
     for (const f of sorted) {

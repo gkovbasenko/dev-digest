@@ -45,6 +45,10 @@
 - Don't bypass `src/lib/api.ts` for direct fetches.
 - Don't import server-only types from `server/` directly — go through `src/vendor/shared` (Zod contracts).
 
+## Skills (invoke when relevant)
+
+- `ui-architecture` — file placement, component folder anatomy, data-fetching flow, naming, vendor UI, tests
+
 ## Docs (read on demand)
 
 - [README.md](./README.md) — route map, stack overview

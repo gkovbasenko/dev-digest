@@ -8,6 +8,7 @@ import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
 import { AppError, NotFoundError } from '../../platform/errors.js';
 import { deriveReviewStatus } from './status.js';
+import { excerptRationale, RATIONALE_EXCERPT_LEN } from './helpers.js';
 import { estimateCost } from '../../adapters/llm/pricing.js';
 
 /**
@@ -150,7 +151,6 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
     };
     const topFindingsByPr = new Map<string, TopFinding[]>();
     const TOP_FINDINGS_PER_PR = 5;
-    const RATIONALE_EXCERPT_LEN = 200;
     if (prIds.length > 0) {
       // Aggregate by pr_id (joined via review_id → reviews.pr_id), excluding
       // dismissed findings and non-review rows (e.g., kind='summary').
@@ -238,10 +238,7 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
           continue;
         }
         const list = topFindingsByPr.get(f.prId) ?? [];
-        const excerpt =
-          f.rationale.length > RATIONALE_EXCERPT_LEN
-            ? f.rationale.slice(0, RATIONALE_EXCERPT_LEN).trimEnd() + '…'
-            : f.rationale;
+        const excerpt = excerptRationale(f.rationale);
         list.push({
           id: f.id,
           severity: f.severity,

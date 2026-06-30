@@ -6,6 +6,8 @@ import type { PreviewFinding, SeverityCounts } from "@/components/findings-previ
 
 const SEV_WEIGHT: Record<string, number> = { CRITICAL: 0, WARNING: 1, SUGGESTION: 2 };
 const TOP_FINDINGS_PER_RUN = 5;
+
+/** Must stay in sync with server/src/modules/pulls/helpers.ts RATIONALE_EXCERPT_LEN. */
 const RATIONALE_EXCERPT_LEN = 200;
 
 export interface RunPreview {
@@ -13,7 +15,7 @@ export interface RunPreview {
   top: PreviewFinding[];
 }
 
-function excerpt(text: string): string {
+function excerptRationale(text: string): string {
   return text.length > RATIONALE_EXCERPT_LEN
     ? text.slice(0, RATIONALE_EXCERPT_LEN).trimEnd() + "…"
     : text;
@@ -55,7 +57,7 @@ export function buildRunPreviewMap(reviews: ReviewRecord[]): Map<string, RunPrev
         start_line: f.start_line,
         end_line: f.end_line,
         confidence: f.confidence,
-        rationale_excerpt: excerpt(f.rationale),
+        rationale_excerpt: excerptRationale(f.rationale),
       }));
     map.set(review.run_id, { counts, top });
   }

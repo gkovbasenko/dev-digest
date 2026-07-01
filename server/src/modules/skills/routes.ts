@@ -45,6 +45,9 @@ const ImportSkillBody = z
   })
   .refine((b) => b.markdown !== undefined || b.url !== undefined, {
     message: 'Provide markdown or url',
+  })
+  .refine((b) => b.markdown === undefined || b.url === undefined, {
+    message: 'Provide only one of markdown or url, not both',
   });
 
 export default async function skillsRoutes(appBase: FastifyInstance) {

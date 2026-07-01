@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import Link from "next/link";
 import { Badge, Checkbox, Icon } from "@devdigest/ui";
 import type { Skill, SkillType } from "@devdigest/shared";
 import { useSkills, useAgentSkills, useSetAgentSkills } from "../../../../../../../lib/hooks/skills";
@@ -152,8 +153,14 @@ export function SkillsTab({ agentId }: { agentId: string }) {
   };
 
   const pending = setAgentSkills.isPending;
+  // Workspace-wide totals — used to gate the "no skills yet" empty state and
+  // the footer hint, which describe the workspace, not the current filter.
   const total = allSkills?.length ?? 0;
   const linked = linkedIds.size;
+  // Header count reflects what's actually visible below it, so it doesn't
+  // contradict the filtered list (e.g. showing "5 of 20" while only 2 rows
+  // are rendered because of an active filter).
+  const visibleCount = filteredLinked.length + filteredUnlinked.length;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
@@ -178,7 +185,7 @@ export function SkillsTab({ agentId }: { agentId: string }) {
         />
         {total > 0 && (
           <div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 8 }}>
-            {linked} of {total} enabled
+            {filteredLinked.length} of {visibleCount} enabled
           </div>
         )}
       </div>
@@ -275,7 +282,7 @@ export function SkillsTab({ agentId }: { agentId: string }) {
         {total === 0 && (
           <div style={{ padding: "32px 0", textAlign: "center", fontSize: 14, color: "var(--text-muted)" }}>
             No skills in this workspace yet.{" "}
-            <a href="/skills" style={{ color: "var(--accent-text)" }}>Create one first.</a>
+            <Link href="/skills" style={{ color: "var(--accent-text)" }}>Create one first.</Link>
           </div>
         )}
       </div>

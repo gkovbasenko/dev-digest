@@ -44,6 +44,21 @@ describe('skills routes (no DB)', () => {
     await app.close();
   });
 
+  it('POST /skills/import → 422 when both markdown and url are provided', async () => {
+    // Otherwise service.import() silently prefers url and drops the pasted
+    // markdown with no indication to the caller — reject the ambiguous
+    // request instead.
+    const app = await buildApp({ config });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/skills/import',
+      payload: { markdown: '# Rule\nBody.', url: 'https://example.com/skill.md' },
+    });
+    expect(res.statusCode).toBe(422);
+    expect(res.json().error.code).toBe('validation_error');
+    await app.close();
+  });
+
   it('POST /skills → 422 when required fields are missing', async () => {
     const app = await buildApp({ config });
     const res = await app.inject({

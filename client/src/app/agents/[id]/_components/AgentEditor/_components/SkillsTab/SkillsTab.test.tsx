@@ -167,6 +167,31 @@ describe("SkillsTab — filter", () => {
     expect(screen.queryByText("Skill B")).not.toBeInTheDocument();
     expect(screen.queryByText("No skills in this workspace yet.")).not.toBeInTheDocument();
   });
+
+  it("the header count reflects the filtered view, not the workspace-wide total", () => {
+    render(<SkillsTab agentId="ag1" />);
+    // Default fixture: sk-a linked, sk-b unlinked — unfiltered count is workspace-wide.
+    expect(screen.getByText("1 of 2 enabled")).toBeInTheDocument();
+
+    // Filtering to "B" hides the linked skill (sk-a) entirely, leaving only
+    // the unlinked sk-b visible — the count must match what's on screen
+    // (0 of 1), not the stale workspace-wide "1 of 2".
+    fireEvent.change(screen.getByPlaceholderText("Filter skills…"), { target: { value: "B" } });
+    expect(screen.getByText("0 of 1 enabled")).toBeInTheDocument();
+  });
+});
+
+describe("SkillsTab — empty workspace", () => {
+  it("links to /skills via next/link (client-side navigation, not a full page reload)", () => {
+    mockSkills.current = [];
+    mockLinks.current = [];
+
+    render(<SkillsTab agentId="ag1" />);
+
+    expect(screen.getByText("No skills in this workspace yet.")).toBeInTheDocument();
+    const link = screen.getByRole("link", { name: "Create one first." });
+    expect(link).toHaveAttribute("href", "/skills");
+  });
 });
 
 /**

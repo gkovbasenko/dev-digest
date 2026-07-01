@@ -123,6 +123,30 @@ describe('fetchSkillUrl', () => {
     await expect(fetchSkillUrl('ftp://example.com/skill.md')).rejects.toThrow('must use HTTPS');
   });
 
+  it('rejects bad-input errors (non-HTTPS, SSRF-blocked, non-2xx) as 422 ValidationError, not a bare 500', async () => {
+    // Regression: these previously threw plain Error, which the app's global
+    // error handler only maps to a status code for AppError subclasses —
+    // everything else fell through to a generic 500 internal_error, hiding
+    // that the request itself (not the server) was the problem.
+    await expect(fetchSkillUrl('http://example.com/skill.md')).rejects.toMatchObject({
+      statusCode: 422,
+      code: 'validation_error',
+    });
+
+    mockLookup.mockResolvedValue({ address: '127.0.0.1', family: 4 });
+    await expect(fetchSkillUrl('https://evil.internal/skill.md')).rejects.toMatchObject({
+      statusCode: 422,
+      code: 'validation_error',
+    });
+
+    mockLookup.mockResolvedValue({ address: '93.184.216.34', family: 4 });
+    mockFetch('Not found', 404);
+    await expect(fetchSkillUrl('https://example.com/missing.md')).rejects.toMatchObject({
+      statusCode: 422,
+      code: 'validation_error',
+    });
+  });
+
   it('rejects an invalid URL', async () => {
     await expect(fetchSkillUrl('not a url')).rejects.toThrow('Invalid skill URL');
   });
@@ -212,24 +236,27 @@ describe('fetchSkillUrl', () => {
       'fetch',
       vi.fn().mockRejectedValue(new TypeError('fetch failed', { cause: new Error('unexpected redirect') })),
     );
-    await expect(fetchSkillUrl('https://example.com/redirects-me.md')).rejects.toThrow(
-      'redirects are not allowed',
-    );
+    await expect(fetchSkillUrl('https://example.com/redirects-me.md')).rejects.toMatchObject({
+      message: expect.stringContaining('redirects are not allowed'),
+      statusCode: 422,
+      code: 'validation_error',
+    });
   });
 
   it('does not mask an unrelated fetch failure as a redirect error', async () => {
     mockLookup.mockResolvedValue({ address: '93.184.216.34', family: 4 });
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockRejectedValue(new TypeError('fetch failed', { cause: new Error('ECONNRESET') })),
-    );
+    const originalErr = new TypeError('fetch failed', { cause: new Error('ECONNRESET') });
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(originalErr));
+
     // Must NOT be reworded to the misleading "redirects are not allowed" —
-    // the original error (with its real cause) is rethrown as-is.
+    // wrapped as an ExternalServiceError (502) with the original error
+    // preserved as `details`, not silently dropped.
     await expect(fetchSkillUrl('https://example.com/flaky.md')).rejects.not.toThrow(
       'redirects are not allowed',
     );
     await expect(fetchSkillUrl('https://example.com/flaky.md')).rejects.toMatchObject({
-      cause: expect.objectContaining({ message: 'ECONNRESET' }),
+      statusCode: 502,
+      details: originalErr,
     });
   });
 

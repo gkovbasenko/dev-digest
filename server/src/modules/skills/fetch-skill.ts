@@ -1,5 +1,6 @@
 import dns from 'node:dns/promises';
 import { Agent } from 'undici';
+import { ValidationError, ExternalServiceError } from '../../platform/errors.js';
 
 const BLOCKED_CIDRS: Array<{ base: number; mask: number }> = [
   { base: cidrBase('127.0.0.0'), mask: 0xff000000 },   // loopback
@@ -40,22 +41,22 @@ export async function fetchSkillUrl(rawUrl: string): Promise<string> {
   try {
     parsed = new URL(rawUrl);
   } catch {
-    throw new Error('Invalid skill URL');
+    throw new ValidationError('Invalid skill URL');
   }
 
   if (parsed.protocol !== 'https:') {
-    throw new Error('Skill URL must use HTTPS');
+    throw new ValidationError('Skill URL must use HTTPS');
   }
 
   const { address, family } = await dns.lookup(parsed.hostname).catch(() => {
-    throw new Error('Could not resolve skill URL hostname');
+    throw new ValidationError('Could not resolve skill URL hostname');
   });
 
   if (family === 4 && isBlockedIPv4(address)) {
-    throw new Error('Skill URL resolves to a private or reserved address');
+    throw new ValidationError('Skill URL resolves to a private or reserved address');
   }
   if (family === 6 && isBlockedIPv6(address)) {
-    throw new Error('Skill URL resolves to a private or reserved address');
+    throw new ValidationError('Skill URL resolves to a private or reserved address');
   }
 
   // Pin the actual connection to the address just validated above. Without this,
@@ -94,16 +95,20 @@ export async function fetchSkillUrl(rawUrl: string): Promise<string> {
     } catch (err) {
       const cause = err instanceof Error ? err.cause : undefined;
       if (cause instanceof Error && /redirect/i.test(cause.message)) {
-        throw new Error('Skill URL redirects are not allowed');
+        throw new ValidationError('Skill URL redirects are not allowed');
       }
-      throw err;
+      // Whatever's left (connection refused, TLS failure, our own timeout) is
+      // a genuine external-service failure, not a malformed request from our
+      // own caller. Carry the original error as `details` so its cause chain
+      // isn't lost.
+      throw new ExternalServiceError('Could not reach skill URL', err);
     }
     if (!res.ok) {
-      throw new Error(`Could not fetch skill URL: ${res.status} ${res.statusText}`);
+      throw new ValidationError(`Could not fetch skill URL: ${res.status} ${res.statusText}`);
     }
 
     const reader = res.body?.getReader();
-    if (!reader) throw new Error('Empty response from skill URL');
+    if (!reader) throw new ValidationError('Empty response from skill URL');
 
     let total = 0;
     const chunks: Uint8Array[] = [];
@@ -116,7 +121,7 @@ export async function fetchSkillUrl(rawUrl: string): Promise<string> {
         // errored) and isn't awaited here, so an unhandled rejection would
         // otherwise propagate and crash the process.
         reader.cancel().catch(() => {});
-        throw new Error('Skill URL response exceeds 1 MB limit');
+        throw new ValidationError('Skill URL response exceeds 1 MB limit');
       }
       chunks.push(value);
     }

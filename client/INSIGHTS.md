@@ -5,6 +5,88 @@ Newest first. See `.claude/skills/engineering-insights/SKILL.md` for what belong
 
 ---
 
+## 2026-07-02 — `Markdown` (`vendor/ui/primitives/Markdown.tsx`) is safe against raw-HTML injection, but link hrefs need explicit scheme sanitization
+
+`Markdown` uses `react-markdown` with only `remarkGfm` — no `rehype-raw` plugin (not even installed: check `client/package.json` before assuming otherwise). Without `rehype-raw`, raw HTML in the markdown source (`<script>`, `<img onerror=...>`) is rendered as literal escaped text, never executed — verified with actual `<script>`/`<img onerror>` payloads through the real component, not just by reading the plugin list. This makes it safe by default for untrusted content (e.g. imported skill bodies). It does NOT sanitize link URL schemes on its own though — the custom `a` renderer passed `href` straight through to a real `<a>` tag, so a `[click](javascript:...)` or `[click](data:text/html,...)` link in untrusted markdown would still execute on click. Fixed with a `safeHref()` allowlist (http/https/mailto only) in the `a` renderer.
+
+**How to apply:** when reviewing "does X markdown renderer allow XSS," check for `rehype-raw` (or equivalent raw-HTML-passthrough plugin) specifically — its absence is the actual safety boundary, not "react-markdown is generally safe." Separately, always verify link scheme handling in any custom link renderer; `react-markdown` itself does not strip dangerous schemes.
+
+**Evidence:** `client/src/vendor/ui/primitives/Markdown.tsx` (`safeHref`), `Markdown.test.tsx` (raw-HTML-not-rendered tests, href-sanitization tests); `client/package.json` has `react-markdown` but no `rehype-raw`.
+
+---
+
+## 2026-07-02 — Confirming before a `key`-remount discards child state needs a ref+callback, not lifted state
+
+`SkillsView` renders `<SkillPreview key={selectedSkill.id} skill={selectedSkill} />` — switching skills remounts a fresh `SkillPreview` instance (correct, since editor state shouldn't carry over between skills). But this means the PARENT can't simply check the child's `editing`/`body` state before allowing a switch — by the time a click handler in the parent would want to ask "is there an unsaved edit?", the relevant state lives in a component instance about to be discarded, and the parent has no synchronous way to inspect it. The fix: `SkillPreview` takes an `onDirtyChange?: (dirty: boolean) => void` prop and reports `editing && body !== skill.body` via a `useEffect` (also firing on unmount, so a stale `true` can't outlive the instance); the parent stores this in a `ref` (not state — it's only read at click time, not rendered) and checks the ref before calling `setSelected(id)`, showing `window.confirm(...)` if dirty.
+
+**How to apply:** any time a parent needs to know about "is there unsaved work in a child that's about to unmount via a `key` change," lift a `dirty` signal via a callback prop into a ref (to avoid extra re-renders), not by trying to read the child's state directly — there's no direct-read path once you're deciding whether to trigger the remount in the first place.
+
+**Evidence:** `client/src/app/skills/_components/SkillsView/SkillPreview.tsx` (`onDirtyChange` prop, `isDirty` effect), `client/src/app/skills/_components/SkillsView/SkillsView.tsx` (`isDirtyRef`, `handleSelectSkill`), `SkillPreview.test.tsx` ("onDirtyChange" describe block), `SkillsView.test.tsx` ("confirm before discarding an unsaved edit" describe block).
+
+---
+
+## 2026-07-01 — Mutation error toasts are wired globally; a missing local `onError` is not a bug
+
+`client/src/lib/providers.tsx`'s `QueryClient` registers `mutationCache: new MutationCache({ onError: (err) => notify.error(errorMessage(err)) })` — **every** `useMutation` failure anywhere in the app already surfaces a toast, unconditionally, regardless of whether that specific call site passes its own `onError`. TanStack Query runs cache-level and call-level callbacks together (neither suppresses the other), so `someMutation.mutate(vars, { onSuccess })` with no `onError` is not missing error handling — it's relying on the already-wired global one instead of duplicating it. This has been misdiagnosed as a bug three separate times in review passes on the skills feature (`AddSkillDrawer`/`CreateSkillModal`'s imports, `SkillsTab`'s optimistic mutations) before being caught.
+
+**How to apply:** before flagging "mutation X has no `onError` / no error feedback," check `providers.tsx` for the global `MutationCache` handler first. A LOCAL `onError` is only needed when a mutation needs something the global toast doesn't do — reverting optimistic local state (see the `isPending`-guard insight above), closing/resetting a form only on success (already the pattern everywhere), or a more specific message than the raw API error.
+
+**Evidence:** `client/src/lib/providers.tsx:41` (`mutationCache`), `client/src/app/skills/_components/SkillsView/AddSkillDrawer.tsx` / `CreateSkillModal.tsx` (import mutations with no local `onError` — correct as-is).
+
+---
+
+## 2026-07-01 — Guard every mutation-triggering handler on `isPending`, not just the obvious one
+
+`SkillsTab`'s `handleToggle` correctly checked `setAgentSkills.isPending` before firing a mutation, but `handleDragEnd` didn't — `draggable` rows have no built-in disabled state, so a user could drop a drag reorder while a toggle mutation from a moment earlier was still in flight, firing a second concurrent `setAgentSkills` mutation. Two in-flight mutations each carry a full order snapshot and each has its own `onError` rollback target (a `previousOrder`/`preDragOrderRef` snapshot) — whichever fails can revert to a snapshot that no longer agrees with the other's in-progress change, and the server itself just serializes whichever response lands last. Fixed by guarding `handleDragStart` on `isPending` (which also blocks `handleDragOver`, since it no-ops when `dragIndexRef.current` stays `null`), plus a defense-in-depth check in `handleDragEnd` itself.
+
+Same anti-pattern recurred in `SkillPreview.tsx`'s `toggleEnabled`: it recomputes `!skill.enabled` from the `skill` prop (no optimistic update, only synced on the mutation's `onSuccess`), so two rapid clicks before the first mutation resolves both read the same stale value and send the identical patch — silently swallowing the second click's intent to toggle back. Fixed with the same `if (update.isPending) return;` guard.
+
+**How to apply:** when a component has more than one gesture that can trigger the same mutation (a click AND a drag, for example), audit ALL of them for the pending guard — copying the guard onto only the first one you write is easy to forget for the others, especially when the second gesture (drag) is spread across three separate handlers (start/over/end) instead of one click handler. More generally: any handler that computes its mutation payload from a component *prop* (rather than a ref/local optimistic state) is vulnerable to this if there's no `isPending` guard, since the prop won't reflect an in-flight mutation's effect until it resolves.
+
+**Evidence:** `client/src/app/agents/[id]/_components/AgentEditor/_components/SkillsTab/SkillsTab.tsx` (`handleDragStart`/`handleDragEnd`), `SkillsTab.test.tsx`; `client/src/app/skills/_components/SkillsView/SkillPreview.tsx` (`toggleEnabled`), `SkillPreview.test.tsx` ("ignores a second click while the toggle mutation is still pending" test).
+
+---
+
+## 2026-07-01 — Optimistic list-membership state must derive `linkedIds` from local state, not server-truth, during the pending window
+
+`SkillsTab` had `linkedIds` derived from `useAgentSkills()`'s `linkedLinks` (server truth), while `linkedSkills` (the "linked" list) was derived from `localOrder` (the optimistic local state updated immediately on toggle/drag, before the mutation resolves). Between clicking a checkbox and the mutation settling, `localOrder` is ahead of `linkedLinks` — so a just-linked skill showed up in BOTH the linked list (via `localOrder`) AND the unlinked list (via stale `linkedIds`) simultaneously, and a just-unlinked skill vanished from both. Fixed by deriving `linkedIds` from `localOrder` (`new Set(localOrder)`) so both derived lists agree on the same live source during the optimistic window.
+
+**How to apply:** whenever a component keeps an optimistic local copy of "what's linked/selected," every other derived value that needs to agree with that list (counts, filters, exclusion sets) must be computed from the SAME optimistic source — never mix one derived value off local state and another off the not-yet-settled server data for the same conceptual membership set.
+
+**Evidence:** `client/src/app/agents/[id]/_components/AgentEditor/_components/SkillsTab/SkillsTab.tsx` (`linkedIds` memo), `SkillsTab.test.tsx` ("does not show a just-linked skill in both...(the optimistic window)" test); found incidentally while adding optimistic-rollback coverage — a test asserting `getAllByRole("checkbox")` returned 3 elements instead of the expected 2 surfaced it.
+
+---
+
+## 2026-07-01 — Mocking a TanStack Query hook with `() => ({ data: [] })` can OOM-crash the test worker
+
+`SkillsTab` has `useEffect(() => { ...; setLocalOrder(...) }, [linkedLinks])`, relying on `useAgentSkills()`'s `data` keeping a stable reference across renders — which the real TanStack Query hook does once a query settles. `AgentEditor.test.tsx` originally mocked it as `useAgentSkills: () => ({ data: [] })`: a fresh `[]` literal is a new reference every call, so the effect's dependency check never bails out — effect runs → `setLocalOrder` → re-render → hook called again → new `[]` → effect runs again, forever. This doesn't reproduce in production (React Query memoizes `data`), only in tests with a naive per-call mock; it reliably drove the Vitest worker to `FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory` and crashed the whole run — not a test failure, so it's easy to mistake for an unrelated environment/OOM flake.
+
+**How to apply:** when mocking a query hook that a component depends on via a `useEffect` dependency array, return a **stable, module-scoped** array/object reference (`vi.hoisted(() => ({ EMPTY: [] }))`, then `() => ({ data: EMPTY })`) — never a fresh literal per call. If a `useEffect` in a component takes `data` as a dependency, always ask whether the mock's `data` reference is stable across renders before assuming a hang/crash is unrelated to the mock.
+
+**Evidence:** `client/src/app/agents/[id]/_components/AgentEditor/_components/SkillsTab/SkillsTab.tsx` (`useEffect` keyed on `linkedLinks`), `client/src/app/agents/[id]/_components/AgentEditor/AgentEditor.test.tsx` (fixed via `vi.hoisted`); reproduced by running the file in isolation — `npx vitest run AgentEditor.test.tsx` hit the Node heap limit before the fix.
+
+---
+
+## 2026-07-01 — `AgentEditor` body container has `padding: 28`; tabs with internal scroll need `tabBody` instead
+
+`s.body` in `AgentEditor/styles.ts` applies `padding: 28` and `overflow: auto` — fine for `ConfigTab`, which renders a scrollable form inside. Any tab that manages its own internal scroll and padding (e.g. `SkillsTab` with a sticky header, scrollable list, and sticky footer) must use `s.tabBody` instead: `{ flex: 1, overflow: auto, display: flex, flexDirection: column, minHeight: 0 }` — no outer padding, so the tab controls its own layout without double-padding.
+
+**How to apply:** when adding a new tab to `AgentEditor`, use `s.body` for simple scrollable forms; use `s.tabBody` for tabs that define their own header/list/footer layout. See `AgentEditor.tsx` for the conditional render pattern.
+
+**Evidence:** `client/src/app/agents/[id]/_components/AgentEditor/styles.ts` (`s.body` and `s.tabBody`), `AgentEditor.tsx` (conditional tab rendering), PR #6.
+
+---
+
+## 2026-07-01 — `icons.tsx` is an explicit allowlist; new Lucide icons must be added before use
+
+`client/src/vendor/ui/icons.tsx` exports only the icons it explicitly imports from `lucide-react` — it is not a pass-through of the full Lucide library. Using an icon name that isn't in the registry compiles fine (TypeScript uses `IconName = keyof typeof Icon`) but the icon reference is simply missing. `BookOpen` and `GripVertical` were absent and had to be added to both the import list and the `Icon` object before they could be used in the nav and `SkillsTab`.
+
+**How to apply:** before referencing a new icon by name anywhere in the codebase, check `icons.tsx` and add the import + registry entry if missing. The `satisfies Record<string, LucideIcon>` on the `Icon` object ensures the type stays correct.
+
+**Evidence:** `client/src/vendor/ui/icons.tsx` (BookOpen and GripVertical added in PR #6), TypeScript `IconName` type is derived from the registry keys.
+
+---
+
 ## 2026-06-30 — PR-list `tableCard` clips per-row overlays; portal them to `<body>`
 
 The PR-list table card sets `overflow: hidden` to mask its rounded corners. Any `position: absolute` overlay rendered inside a row (popover, dropdown, tooltip, composer) gets **clipped the moment it drops below the row's content box**. The bug is silent: the trigger works, but the floating content is partly or fully invisible.

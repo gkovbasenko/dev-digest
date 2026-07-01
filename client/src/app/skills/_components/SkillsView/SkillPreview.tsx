@@ -14,7 +14,16 @@ const TYPE_COLORS: Record<SkillType, { color: string; bg: string }> = {
   custom: { color: "var(--text-muted)", bg: "var(--bg-hover)" },
 };
 
-export function SkillPreview({ skill }: { skill: Skill }) {
+export function SkillPreview({
+  skill,
+  onDirtyChange,
+}: {
+  skill: Skill;
+  /** Reports whether there's an in-progress, unsaved body edit — so the
+   *  parent (which owns skill selection) can confirm before switching away
+   *  and silently discarding it. */
+  onDirtyChange?: (dirty: boolean) => void;
+}) {
   const update = useUpdateSkill();
   const toast = useToast();
   const [editing, setEditing] = React.useState(false);
@@ -29,6 +38,15 @@ export function SkillPreview({ skill }: { skill: Skill }) {
     setEnabled(skill.enabled);
     setEditing(false);
   }, [skill.id]);
+
+  const isDirty = editing && body !== skill.body;
+  React.useEffect(() => {
+    onDirtyChange?.(isDirty);
+    // Clear the dirty flag on unmount (switching away via the key change) so
+    // the parent doesn't keep thinking there's a pending edit once this
+    // instance is gone.
+    return () => onDirtyChange?.(false);
+  }, [isDirty, onDirtyChange]);
 
   const typeColor = TYPE_COLORS[skill.type] ?? TYPE_COLORS.custom;
   const isUntrusted = skill.source !== "manual";

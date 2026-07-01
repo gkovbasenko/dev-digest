@@ -5,6 +5,16 @@ Newest first. See `.claude/skills/engineering-insights/SKILL.md` for what belong
 
 ---
 
+## 2026-07-02 — Confirming before a `key`-remount discards child state needs a ref+callback, not lifted state
+
+`SkillsView` renders `<SkillPreview key={selectedSkill.id} skill={selectedSkill} />` — switching skills remounts a fresh `SkillPreview` instance (correct, since editor state shouldn't carry over between skills). But this means the PARENT can't simply check the child's `editing`/`body` state before allowing a switch — by the time a click handler in the parent would want to ask "is there an unsaved edit?", the relevant state lives in a component instance about to be discarded, and the parent has no synchronous way to inspect it. The fix: `SkillPreview` takes an `onDirtyChange?: (dirty: boolean) => void` prop and reports `editing && body !== skill.body` via a `useEffect` (also firing on unmount, so a stale `true` can't outlive the instance); the parent stores this in a `ref` (not state — it's only read at click time, not rendered) and checks the ref before calling `setSelected(id)`, showing `window.confirm(...)` if dirty.
+
+**How to apply:** any time a parent needs to know about "is there unsaved work in a child that's about to unmount via a `key` change," lift a `dirty` signal via a callback prop into a ref (to avoid extra re-renders), not by trying to read the child's state directly — there's no direct-read path once you're deciding whether to trigger the remount in the first place.
+
+**Evidence:** `client/src/app/skills/_components/SkillsView/SkillPreview.tsx` (`onDirtyChange` prop, `isDirty` effect), `client/src/app/skills/_components/SkillsView/SkillsView.tsx` (`isDirtyRef`, `handleSelectSkill`), `SkillPreview.test.tsx` ("onDirtyChange" describe block), `SkillsView.test.tsx` ("confirm before discarding an unsaved edit" describe block).
+
+---
+
 ## 2026-07-01 — Mutation error toasts are wired globally; a missing local `onError` is not a bug
 
 `client/src/lib/providers.tsx`'s `QueryClient` registers `mutationCache: new MutationCache({ onError: (err) => notify.error(errorMessage(err)) })` — **every** `useMutation` failure anywhere in the app already surfaces a toast, unconditionally, regardless of whether that specific call site passes its own `onError`. TanStack Query runs cache-level and call-level callbacks together (neither suppresses the other), so `someMutation.mutate(vars, { onSuccess })` with no `onError` is not missing error handling — it's relying on the already-wired global one instead of duplicating it. This has been misdiagnosed as a bug three separate times in review passes on the skills feature (`AddSkillDrawer`/`CreateSkillModal`'s imports, `SkillsTab`'s optimistic mutations) before being caught.

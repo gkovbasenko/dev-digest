@@ -73,6 +73,7 @@ export function SkillsTab({ agentId }: { agentId: string }) {
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [allSkills, linkedIds]);
 
+  const isFiltering = filter.trim().length > 0;
   const filteredLinked = linkedSkills.filter((s) =>
     s.name.toLowerCase().includes(filter.toLowerCase()),
   );
@@ -85,6 +86,11 @@ export function SkillsTab({ agentId }: { agentId: string }) {
     const previousOrder = localOrder;
     let newOrder: string[];
     if (checked) {
+      // Guard against duplicating the id — should be unreachable, since
+      // unlinkedSkills is filtered to exclude anything already in
+      // localOrder, but a future refactor of that derivation could silently
+      // break the invariant this depends on.
+      if (localOrder.includes(skillId)) return;
       newOrder = [...localOrder, skillId];
     } else {
       newOrder = localOrder.filter((id) => id !== skillId);
@@ -111,7 +117,12 @@ export function SkillsTab({ agentId }: { agentId: string }) {
   const handleDragOver = (e: React.DragEvent, idx: number) => {
     e.preventDefault();
     const from = dragIndexRef.current;
-    if (from === null || from === idx) return;
+    // from is only ever set from a realIdx computed the same way as idx
+    // (localOrder.indexOf(skill.id) in the render loop), so it should
+    // always be a valid in-bounds index here — but a negative from would
+    // make splice() count from the array's end and silently move the wrong
+    // skill, so bounds-check defensively rather than trust the ref.
+    if (from === null || from < 0 || from >= localOrder.length || from === idx) return;
     const newOrder = [...localOrder];
     const moved = newOrder.splice(from, 1)[0]!;
     newOrder.splice(idx, 0, moved);
@@ -125,6 +136,11 @@ export function SkillsTab({ agentId }: { agentId: string }) {
     // mutation somehow became pending mid-gesture, don't fire a second one.
     if (setAgentSkills.isPending) return;
     const previousOrder = preDragOrderRef.current;
+    // Skip the network round-trip entirely if the drag ended back where it
+    // started (picked up and dropped in the same spot) — nothing changed.
+    if (localOrder.length === previousOrder.length && localOrder.every((id, i) => id === previousOrder[i])) {
+      return;
+    }
     // Commit the new order to the server; revert to the pre-drag order if it
     // fails so the list doesn't keep showing a reorder that was never saved.
     setAgentSkills.mutate(localOrder, {
@@ -139,6 +155,11 @@ export function SkillsTab({ agentId }: { agentId: string }) {
   // search filter is narrowing which rows are rendered.
   const moveLinked = (realIdx: number, direction: -1 | 1) => {
     if (setAgentSkills.isPending) return;
+    // realIdx comes from localOrder.indexOf(skill.id) for a skill rendered
+    // from localOrder itself, so it should never be -1 — but guard the
+    // source index too, not just the target, since indexOf() returning -1
+    // would otherwise swap in `undefined` and corrupt the order.
+    if (realIdx < 0 || realIdx >= localOrder.length) return;
     const targetIdx = realIdx + direction;
     if (targetIdx < 0 || targetIdx >= localOrder.length) return;
     const previousOrder = localOrder;
@@ -225,23 +246,29 @@ export function SkillsTab({ agentId }: { agentId: string }) {
                 {skill.name}
               </span>
               <Badge color={tc.color} bg={tc.bg}>{skill.type}</Badge>
-              {/* Keyboard/screen-reader-accessible alternative to drag reordering */}
+              {/* Keyboard/screen-reader-accessible alternative to drag reordering.
+                  Disabled while filtering: realIdx/boundary checks are against the
+                  full unfiltered localOrder, so "move up/down" would swap with a
+                  neighbor hidden by the filter — invisible and confusing. Clear
+                  the filter to reorder. */}
               <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                 <button
                   type="button"
                   aria-label={`Move ${skill.name} up`}
+                  title={isFiltering ? "Clear the filter to reorder" : undefined}
                   onClick={() => moveLinked(realIdx, -1)}
-                  disabled={pending || realIdx === 0}
-                  style={moveButtonStyle(pending || realIdx === 0)}
+                  disabled={pending || isFiltering || realIdx === 0}
+                  style={moveButtonStyle(pending || isFiltering || realIdx === 0)}
                 >
                   <Icon.ArrowUp size={12} />
                 </button>
                 <button
                   type="button"
                   aria-label={`Move ${skill.name} down`}
+                  title={isFiltering ? "Clear the filter to reorder" : undefined}
                   onClick={() => moveLinked(realIdx, 1)}
-                  disabled={pending || realIdx === localOrder.length - 1}
-                  style={moveButtonStyle(pending || realIdx === localOrder.length - 1)}
+                  disabled={pending || isFiltering || realIdx === localOrder.length - 1}
+                  style={moveButtonStyle(pending || isFiltering || realIdx === localOrder.length - 1)}
                 >
                   <Icon.ArrowDown size={12} />
                 </button>

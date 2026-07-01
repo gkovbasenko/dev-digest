@@ -25,12 +25,27 @@ export function SkillsView() {
 
   const [drawerMode, setDrawerMode] = React.useState<DrawerMode>(null);
   const [showCreate, setShowCreate] = React.useState(false);
+  // Tracks whether SkillPreview currently has an unsaved body edit in
+  // progress. A ref (not state) since it's only read at click time and
+  // shouldn't trigger a re-render of this component on every keystroke.
+  const isDirtyRef = React.useRef(false);
 
   const setSelected = (id: string | null) => {
     const sp = new URLSearchParams(search.toString());
     if (id) sp.set("selected", id);
     else sp.delete("selected");
     router.replace(`/skills?${sp.toString()}`);
+  };
+
+  // Confirm before switching away from a skill with an unsaved edit in
+  // progress — without this, clicking a different row silently discards it
+  // (SkillPreview remounts fresh via its `key={selectedSkill.id}`).
+  const handleSelectSkill = (id: string) => {
+    if (id === selectedId) return;
+    if (isDirtyRef.current && !window.confirm("Discard unsaved changes to this skill?")) {
+      return;
+    }
+    setSelected(id);
   };
 
   const dropdownItems = [
@@ -82,7 +97,7 @@ export function SkillsView() {
                   key={skill.id}
                   skill={skill}
                   active={skill.id === selectedId}
-                  onClick={() => setSelected(skill.id)}
+                  onClick={() => handleSelectSkill(skill.id)}
                 />
               ))
             )}
@@ -92,7 +107,13 @@ export function SkillsView() {
         {/* Right panel */}
         <div style={s.right}>
           {selectedSkill ? (
-            <SkillPreview key={selectedSkill.id} skill={selectedSkill} />
+            <SkillPreview
+              key={selectedSkill.id}
+              skill={selectedSkill}
+              onDirtyChange={(dirty) => {
+                isDirtyRef.current = dirty;
+              }}
+            />
           ) : (
             <EmptyState
               icon="BookOpen"

@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
+import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import type { Skill } from "@devdigest/shared";
 
@@ -175,5 +175,62 @@ describe("SkillPreview — inline edit/save/cancel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
 
     expect(screen.getByRole("button", { name: "Saving…" })).toBeDisabled();
+  });
+});
+
+describe("SkillPreview — onDirtyChange", () => {
+  beforeEach(() => {
+    mockMutate.mockReset();
+    mockIsPending.current = false;
+  });
+
+  it("reports dirty only once editing AND the body actually differs from the saved value", () => {
+    const onDirtyChange = vi.fn();
+    render(<SkillPreview skill={BASE_SKILL} onDirtyChange={onDirtyChange} />);
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    // Entering edit mode alone isn't dirty — the body hasn't changed yet.
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "edited body" } });
+    expect(onDirtyChange).toHaveBeenLastCalledWith(true);
+  });
+
+  it("reports not-dirty again after Cancel", () => {
+    const onDirtyChange = vi.fn();
+    render(<SkillPreview skill={BASE_SKILL} onDirtyChange={onDirtyChange} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "edited body" } });
+    expect(onDirtyChange).toHaveBeenLastCalledWith(true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it("reports not-dirty again after a successful save", () => {
+    mockMutate.mockImplementation((_vars, opts) => opts?.onSuccess?.());
+    const onDirtyChange = vi.fn();
+    render(<SkillPreview skill={BASE_SKILL} onDirtyChange={onDirtyChange} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "edited body" } });
+    expect(onDirtyChange).toHaveBeenLastCalledWith(true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it("reports not-dirty on unmount (so a stale dirty flag can't leak into the next selection)", () => {
+    const onDirtyChange = vi.fn();
+    const { unmount } = render(<SkillPreview skill={BASE_SKILL} onDirtyChange={onDirtyChange} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "edited body" } });
+    expect(onDirtyChange).toHaveBeenLastCalledWith(true);
+
+    unmount();
+    expect(onDirtyChange).toHaveBeenLastCalledWith(false);
   });
 });

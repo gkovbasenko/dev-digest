@@ -268,4 +268,39 @@ describe("SkillsTab — move-up/move-down buttons", () => {
       expect(screen.getByRole("button", { name: "Move Skill A up" })).toBeDisabled();
     });
   });
+
+  it("disables both move buttons while a filter is active (boundary checks are against the unfiltered order)", () => {
+    mockSkills.current = THREE_SKILLS;
+    mockLinks.current = THREE_LINKS;
+    mockMutate.mockReset();
+
+    render(<SkillsTab agentId="ag1" />);
+    fireEvent.change(screen.getByPlaceholderText("Filter skills…"), { target: { value: "Skill B" } });
+
+    // Skill B is the middle item — normally movable both ways — but with the
+    // filter narrowing the list to just it, its neighbors (A, C) are hidden,
+    // so moving it would swap with an invisible skill. Both buttons must be
+    // disabled while filtering, not just at the true first/last boundary.
+    expect(screen.getByRole("button", { name: "Move Skill B up" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Move Skill B down" })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Move Skill B up" }));
+    expect(mockMutate).not.toHaveBeenCalled();
+  });
+});
+
+describe("SkillsTab — drag no-op", () => {
+  it("does not fire a mutation when a drag ends without reordering anything", () => {
+    mockMutate.mockReset();
+
+    render(<SkillsTab agentId="ag1" />);
+    const linkedRow = screen.getByText("Skill A").closest("[draggable]")!;
+
+    // dragStart then dragEnd with no dragOver in between — the user picked
+    // up the row and dropped it right back where it started.
+    fireEvent.dragStart(linkedRow);
+    fireEvent.dragEnd(linkedRow);
+
+    expect(mockMutate).not.toHaveBeenCalled();
+  });
 });

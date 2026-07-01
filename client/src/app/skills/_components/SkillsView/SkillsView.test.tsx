@@ -126,3 +126,57 @@ describe("SkillsView", () => {
     ).toBeInTheDocument();
   });
 });
+
+describe("SkillsView — confirm before discarding an unsaved edit", () => {
+  it("confirms before switching away from a skill with an unsaved edit, and does not switch if the user cancels", () => {
+    mockSkills.current = [SKILL_A, SKILL_B];
+    mockSearchParams.current = new URLSearchParams("selected=sk-a");
+    mockSelectedSkill.current = SKILL_A;
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+
+    render(<SkillsView />);
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "edited body" } });
+
+    mockRouterReplace.mockReset();
+    fireEvent.click(screen.getByText("Skill B"));
+
+    expect(confirmSpy).toHaveBeenCalled();
+    expect(mockRouterReplace).not.toHaveBeenCalled();
+
+    confirmSpy.mockRestore();
+  });
+
+  it("switches away when the user confirms discarding the unsaved edit", () => {
+    mockSkills.current = [SKILL_A, SKILL_B];
+    mockSearchParams.current = new URLSearchParams("selected=sk-a");
+    mockSelectedSkill.current = SKILL_A;
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    render(<SkillsView />);
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "edited body" } });
+
+    mockRouterReplace.mockReset();
+    fireEvent.click(screen.getByText("Skill B"));
+
+    expect(mockRouterReplace).toHaveBeenCalledWith("/skills?selected=sk-b");
+
+    confirmSpy.mockRestore();
+  });
+
+  it("does not prompt when switching away from a skill with no unsaved edit", () => {
+    mockSkills.current = [SKILL_A, SKILL_B];
+    mockSearchParams.current = new URLSearchParams("selected=sk-a");
+    mockSelectedSkill.current = SKILL_A;
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    render(<SkillsView />);
+    fireEvent.click(screen.getByText("Skill B"));
+
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(mockRouterReplace).toHaveBeenCalledWith("/skills?selected=sk-b");
+
+    confirmSpy.mockRestore();
+  });
+});

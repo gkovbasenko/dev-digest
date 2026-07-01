@@ -19,9 +19,14 @@ export function SkillPreview({ skill }: { skill: Skill }) {
   const toast = useToast();
   const [editing, setEditing] = React.useState(false);
   const [body, setBody] = React.useState(skill.body);
+  // Optimistic local mirror of skill.enabled — without it, the Toggle only
+  // moves once the mutation resolves and the query cache refreshes, which
+  // reads as an unresponsive switch on a slow network. Reverted on error.
+  const [enabled, setEnabled] = React.useState(skill.enabled);
 
   React.useEffect(() => {
     setBody(skill.body);
+    setEnabled(skill.enabled);
     setEditing(false);
   }, [skill.id]);
 
@@ -30,11 +35,17 @@ export function SkillPreview({ skill }: { skill: Skill }) {
 
   const toggleEnabled = () => {
     // Without this guard, a second click before the first mutation's
-    // onSuccess updates the cache would recompute !skill.enabled from the
-    // same stale prop value and send the same patch again — silently
-    // swallowing the user's intent to toggle back.
+    // onSuccess updates the cache would recompute !enabled from the same
+    // stale value and send the same patch again — silently swallowing the
+    // user's intent to toggle back.
     if (update.isPending) return;
-    update.mutate({ id: skill.id, patch: { enabled: !skill.enabled } });
+    const previous = enabled;
+    const next = !enabled;
+    setEnabled(next);
+    update.mutate(
+      { id: skill.id, patch: { enabled: next } },
+      { onError: () => setEnabled(previous) },
+    );
   };
 
   const saveBody = () =>
@@ -59,8 +70,8 @@ export function SkillPreview({ skill }: { skill: Skill }) {
             <Badge color="#f59e0b" bg="rgba(245,158,11,0.12)">untrusted source</Badge>
           )}
           <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--text-secondary)", opacity: update.isPending ? 0.6 : 1 }}>
-            {skill.enabled ? "Enabled" : "Disabled"}
-            <Toggle on={skill.enabled} onChange={toggleEnabled} size={16} />
+            {enabled ? "Enabled" : "Disabled"}
+            <Toggle on={enabled} onChange={toggleEnabled} size={16} />
           </label>
         </div>
       </div>

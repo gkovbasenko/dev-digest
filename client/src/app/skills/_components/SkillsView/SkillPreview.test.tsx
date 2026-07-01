@@ -47,7 +47,39 @@ describe("SkillPreview — enabled toggle", () => {
     fireEvent.click(screen.getByRole("switch"));
 
     expect(mockMutate).toHaveBeenCalledTimes(1);
-    expect(mockMutate).toHaveBeenCalledWith({ id: "sk1", patch: { enabled: false } });
+    expect(mockMutate).toHaveBeenCalledWith(
+      { id: "sk1", patch: { enabled: false } },
+      expect.any(Object),
+    );
+  });
+
+  it("optimistically flips the switch immediately, before the mutation resolves", () => {
+    mockMutate.mockReset();
+    mockMutate.mockImplementation(() => {}); // never resolves — stays in the optimistic window
+    mockIsPending.current = false;
+
+    render(<SkillPreview skill={BASE_SKILL} />);
+    const toggle = screen.getByRole("switch");
+    expect(toggle).toHaveAttribute("aria-checked", "true");
+
+    fireEvent.click(toggle);
+
+    expect(toggle).toHaveAttribute("aria-checked", "false");
+  });
+
+  it("reverts the optimistic toggle if the mutation fails", () => {
+    mockMutate.mockReset();
+    mockMutate.mockImplementation((_vars, opts) => {
+      opts?.onError?.();
+    });
+    mockIsPending.current = false;
+
+    render(<SkillPreview skill={BASE_SKILL} />);
+    const toggle = screen.getByRole("switch");
+
+    fireEvent.click(toggle);
+
+    expect(toggle).toHaveAttribute("aria-checked", "true");
   });
 
   it("ignores a second click while the toggle mutation is still pending", () => {

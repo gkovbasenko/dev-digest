@@ -1,0 +1,4 @@
+export const INITIAL_SKILL_VERSION = 1;
+
+export const UNTRUSTED_SKILL_START = '<!-- BEGIN UNTRUSTED SKILL -->';
+export const UNTRUSTED_SKILL_END = '<!-- END UNTRUSTED SKILL -->';

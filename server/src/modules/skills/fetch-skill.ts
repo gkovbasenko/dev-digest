@@ -83,39 +83,50 @@ export async function fetchSkillUrl(rawUrl: string): Promise<string> {
 
   const MAX_BYTES = 1 * 1024 * 1024;
 
-  let res: Response;
   try {
-    res = await fetch(rawUrl, {
-      signal: AbortSignal.timeout(10_000),
-      redirect: 'error',
-      dispatcher: pinnedDispatcher,
-    });
-  } catch (err) {
-    const cause = err instanceof Error ? err.cause : undefined;
-    if (cause instanceof Error && /redirect/i.test(cause.message)) {
-      throw new Error('Skill URL redirects are not allowed');
+    let res: Response;
+    try {
+      res = await fetch(rawUrl, {
+        signal: AbortSignal.timeout(10_000),
+        redirect: 'error',
+        dispatcher: pinnedDispatcher,
+      });
+    } catch (err) {
+      const cause = err instanceof Error ? err.cause : undefined;
+      if (cause instanceof Error && /redirect/i.test(cause.message)) {
+        throw new Error('Skill URL redirects are not allowed');
+      }
+      throw err;
     }
-    throw err;
-  }
-  if (!res.ok) {
-    throw new Error(`Could not fetch skill URL: ${res.status} ${res.statusText}`);
-  }
-
-  const reader = res.body?.getReader();
-  if (!reader) throw new Error('Empty response from skill URL');
-
-  let total = 0;
-  const chunks: Uint8Array[] = [];
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    total += value.length;
-    if (total > MAX_BYTES) {
-      reader.cancel();
-      throw new Error('Skill URL response exceeds 1 MB limit');
+    if (!res.ok) {
+      throw new Error(`Could not fetch skill URL: ${res.status} ${res.statusText}`);
     }
-    chunks.push(value);
-  }
 
-  return new TextDecoder().decode(Buffer.concat(chunks, total));
+    const reader = res.body?.getReader();
+    if (!reader) throw new Error('Empty response from skill URL');
+
+    let total = 0;
+    const chunks: Uint8Array[] = [];
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.length;
+      if (total > MAX_BYTES) {
+        // Fire-and-forget: cancel() can reject (e.g. the stream already
+        // errored) and isn't awaited here, so an unhandled rejection would
+        // otherwise propagate and crash the process.
+        reader.cancel().catch(() => {});
+        throw new Error('Skill URL response exceeds 1 MB limit');
+      }
+      chunks.push(value);
+    }
+
+    return new TextDecoder().decode(Buffer.concat(chunks, total));
+  } finally {
+    // This dispatcher is scoped to a single request (its `lookup` is pinned to
+    // one already-validated address) — nothing else can reuse its connection
+    // pool, so close it immediately rather than leaving a keep-alive socket
+    // open until undici's own idle timeout.
+    await pinnedDispatcher.close();
+  }
 }

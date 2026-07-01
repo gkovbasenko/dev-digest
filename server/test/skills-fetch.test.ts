@@ -113,7 +113,7 @@ beforeEach(() => {
   vi.unstubAllGlobals();
   mockLookup.mockReset();
   mockAgentCtor.mockReset();
-  mockAgentCtor.mockImplementation((opts: unknown) => ({ __opts: opts }));
+  mockAgentCtor.mockImplementation((opts: unknown) => ({ __opts: opts, close: vi.fn().mockResolvedValue(undefined) }));
 });
 
 describe('fetchSkillUrl', () => {
@@ -231,5 +231,48 @@ describe('fetchSkillUrl', () => {
     await expect(fetchSkillUrl('https://example.com/flaky.md')).rejects.toMatchObject({
       cause: expect.objectContaining({ message: 'ECONNRESET' }),
     });
+  });
+
+  it('closes the per-request dispatcher after a successful fetch (no lingering socket)', async () => {
+    mockLookup.mockResolvedValue({ address: '93.184.216.34', family: 4 });
+    mockFetch('# My Skill');
+
+    await fetchSkillUrl('https://example.com/skill.md');
+
+    const dispatcher = mockAgentCtor.mock.results[0]!.value;
+    expect(dispatcher.close).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes the per-request dispatcher even when the fetch fails', async () => {
+    mockLookup.mockResolvedValue({ address: '93.184.216.34', family: 4 });
+    mockFetch('Not found', 404);
+
+    await expect(fetchSkillUrl('https://example.com/missing.md')).rejects.toThrow();
+
+    const dispatcher = mockAgentCtor.mock.results[0]!.value;
+    expect(dispatcher.close).toHaveBeenCalledTimes(1);
+  });
+
+  it('a rejecting reader.cancel() on the size-limit path does not surface as an unhandled rejection', async () => {
+    mockLookup.mockResolvedValue({ address: '93.184.216.34', family: 4 });
+    const bigChunk = new TextEncoder().encode('x'.repeat(2 * 1024 * 1024));
+    const stream = new ReadableStream({
+      pull(controller) {
+        controller.enqueue(bigChunk);
+      },
+      cancel() {
+        return Promise.reject(new Error('stream already errored'));
+      },
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: true, status: 200, statusText: 'OK', body: stream }),
+    );
+
+    // If cancel()'s rejection weren't caught, this would surface as an
+    // unhandled rejection rather than the expected, catchable error.
+    await expect(fetchSkillUrl('https://example.com/huge.md')).rejects.toThrow(
+      'exceeds 1 MB limit',
+    );
   });
 });

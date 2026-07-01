@@ -45,6 +45,10 @@
 - `src/db/migrations/*` — generated artifacts; don't edit by hand.
 - Don't bypass the DI container to instantiate adapters directly.
 
+## Skills (invoke when relevant)
+
+- `server-architecture` — Onion layers (route → service → repo → adapter), DI container, module anatomy, forbidden cross-layer patterns
+
 ## Docs (read on demand)
 
 - [README.md](./README.md) — request/DI flow, module plugin architecture

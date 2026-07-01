@@ -17,7 +17,18 @@ vi.mock("../../../../../../../lib/hooks/skills", () => ({
 
 import { SkillsTab } from "./SkillsTab";
 
-afterEach(cleanup);
+// Single source of truth for resetting mutable mock state between tests —
+// previously only the second describe block reset mockSkills/mockLinks (and
+// none reset mockIsPending consistently), so a failed or skipped test could
+// leave isPending=true (or the wrong skill fixture) leaking into whichever
+// test ran next, regardless of which describe block it was in.
+afterEach(() => {
+  cleanup();
+  mockMutate.mockReset();
+  mockIsPending.current = false;
+  mockSkills.current = SKILLS;
+  mockLinks.current = LINKS;
+});
 
 const SKILLS: Skill[] = [
   {
@@ -114,7 +125,47 @@ describe("SkillsTab — optimistic rollback on mutation failure", () => {
     fireEvent.dragEnd(linkedRow);
 
     expect(mockMutate).not.toHaveBeenCalled();
-    mockIsPending.current = false;
+  });
+});
+
+describe("SkillsTab — filter", () => {
+  it("narrows both the linked and unlinked lists to names matching the filter", () => {
+    render(<SkillsTab agentId="ag1" />);
+    // Default fixture: Skill A is linked, Skill B is unlinked — both visible
+    // with no filter applied.
+    expect(screen.getByText("Skill A")).toBeInTheDocument();
+    expect(screen.getByText("Skill B")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText("Filter skills…"), { target: { value: "B" } });
+
+    expect(screen.queryByText("Skill A")).not.toBeInTheDocument();
+    expect(screen.getByText("Skill B")).toBeInTheDocument();
+  });
+
+  it("filter matching is case-insensitive", () => {
+    render(<SkillsTab agentId="ag1" />);
+    fireEvent.change(screen.getByPlaceholderText("Filter skills…"), { target: { value: "skill b" } });
+    expect(screen.queryByText("Skill A")).not.toBeInTheDocument();
+    expect(screen.getByText("Skill B")).toBeInTheDocument();
+  });
+
+  it("clearing the filter restores both lists", () => {
+    render(<SkillsTab agentId="ag1" />);
+    const filterInput = screen.getByPlaceholderText("Filter skills…");
+    fireEvent.change(filterInput, { target: { value: "B" } });
+    expect(screen.queryByText("Skill A")).not.toBeInTheDocument();
+
+    fireEvent.change(filterInput, { target: { value: "" } });
+    expect(screen.getByText("Skill A")).toBeInTheDocument();
+    expect(screen.getByText("Skill B")).toBeInTheDocument();
+  });
+
+  it("shows no rows (but not the 'no skills' empty state) when nothing matches", () => {
+    render(<SkillsTab agentId="ag1" />);
+    fireEvent.change(screen.getByPlaceholderText("Filter skills…"), { target: { value: "zzz-no-match" } });
+    expect(screen.queryByText("Skill A")).not.toBeInTheDocument();
+    expect(screen.queryByText("Skill B")).not.toBeInTheDocument();
+    expect(screen.queryByText("No skills in this workspace yet.")).not.toBeInTheDocument();
   });
 });
 
@@ -133,11 +184,6 @@ describe("SkillsTab — move-up/move-down buttons", () => {
     { agent_id: "ag1", skill_id: "sk-b", order: 1 },
     { agent_id: "ag1", skill_id: "sk-c", order: 2 },
   ];
-
-  afterEach(() => {
-    mockSkills.current = SKILLS;
-    mockLinks.current = LINKS;
-  });
 
   it("moves the middle item up, committing the swapped order", () => {
     mockSkills.current = THREE_SKILLS;

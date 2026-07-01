@@ -62,3 +62,86 @@ describe("SkillPreview — enabled toggle", () => {
     mockIsPending.current = false;
   });
 });
+
+describe("SkillPreview — inline edit/save/cancel", () => {
+  afterEach(() => {
+    mockMutate.mockReset();
+    mockIsPending.current = false;
+  });
+
+  it("Edit switches to the textarea, seeded with the current body", () => {
+    render(<SkillPreview skill={BASE_SKILL} />);
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+
+    expect(screen.getByRole("textbox")).toHaveValue(BASE_SKILL.body);
+    expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
+  });
+
+  it("Save sends the edited body as the mutation patch", () => {
+    mockMutate.mockImplementation(() => {});
+    render(<SkillPreview skill={BASE_SKILL} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "# Rule\nDo the NEW thing." } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(mockMutate).toHaveBeenCalledWith(
+      { id: "sk1", patch: { body: "# Rule\nDo the NEW thing." } },
+      expect.any(Object),
+    );
+  });
+
+  it("exits edit mode after a successful save", () => {
+    mockMutate.mockImplementation((_vars, opts) => {
+      opts?.onSuccess?.();
+    });
+    render(<SkillPreview skill={BASE_SKILL} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "# Rule\nDo the NEW thing." } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
+  });
+
+  it("stays in edit mode with the typed body if the save fails (no onSuccess call)", () => {
+    mockMutate.mockImplementation(() => {}); // never calls onSuccess — simulates a pending/failed save
+    render(<SkillPreview skill={BASE_SKILL} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "unsaved edit" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(screen.getByRole("textbox")).toHaveValue("unsaved edit");
+  });
+
+  it("Cancel reverts to the original body and exits edit mode without mutating", () => {
+    render(<SkillPreview skill={BASE_SKILL} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "a throwaway edit" } });
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(mockMutate).not.toHaveBeenCalled();
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
+
+    // Re-entering edit mode shows the ORIGINAL body, not the discarded edit.
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    expect(screen.getByRole("textbox")).toHaveValue(BASE_SKILL.body);
+  });
+
+  it("disables Save and shows a pending label while the save mutation is in flight", () => {
+    mockIsPending.current = true;
+    render(<SkillPreview skill={BASE_SKILL} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+
+    expect(screen.getByRole("button", { name: "Saving…" })).toBeDisabled();
+  });
+});

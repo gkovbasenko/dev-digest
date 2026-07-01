@@ -83,9 +83,9 @@ describe("SkillsTab — optimistic rollback on mutation failure", () => {
     expect(mockMutate).toHaveBeenCalledWith(["sk-a", "sk-b"], expect.any(Object));
 
     // The mutate mock synchronously invoked onError, so the optimistic add
-    // must already be rolled back: "1 of 2 enabled" (back to just sk-a), not 2.
+    // must already be rolled back: "1 of 2 linked" (back to just sk-a), not 2.
     await waitFor(() => {
-      expect(screen.getByText("1 of 2 enabled")).toBeInTheDocument();
+      expect(screen.getByText("1 of 2 linked")).toBeInTheDocument();
     });
   });
 
@@ -97,7 +97,7 @@ describe("SkillsTab — optimistic rollback on mutation failure", () => {
     const skillBCheckbox = screen.getAllByRole("checkbox")[1]!;
     fireEvent.click(skillBCheckbox);
 
-    expect(screen.getByText("2 of 2 enabled")).toBeInTheDocument();
+    expect(screen.getByText("2 of 2 linked")).toBeInTheDocument();
   });
 
   it("does not show a just-linked skill in both the linked and unlinked lists during the optimistic window", () => {
@@ -171,13 +171,13 @@ describe("SkillsTab — filter", () => {
   it("the header count reflects the filtered view, not the workspace-wide total", () => {
     render(<SkillsTab agentId="ag1" />);
     // Default fixture: sk-a linked, sk-b unlinked — unfiltered count is workspace-wide.
-    expect(screen.getByText("1 of 2 enabled")).toBeInTheDocument();
+    expect(screen.getByText("1 of 2 linked")).toBeInTheDocument();
 
     // Filtering to "B" hides the linked skill (sk-a) entirely, leaving only
     // the unlinked sk-b visible — the count must match what's on screen
     // (0 of 1), not the stale workspace-wide "1 of 2".
     fireEvent.change(screen.getByPlaceholderText("Filter skills…"), { target: { value: "B" } });
-    expect(screen.getByText("0 of 1 enabled")).toBeInTheDocument();
+    expect(screen.getByText("0 of 1 linked")).toBeInTheDocument();
   });
 });
 

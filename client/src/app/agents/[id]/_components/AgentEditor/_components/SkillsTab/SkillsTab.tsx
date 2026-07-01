@@ -206,7 +206,7 @@ export function SkillsTab({ agentId }: { agentId: string }) {
         />
         {total > 0 && (
           <div style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 8 }}>
-            {filteredLinked.length} of {visibleCount} enabled
+            {filteredLinked.length} of {visibleCount} linked
           </div>
         )}
       </div>

@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { SkillType } from '@devdigest/shared';
+import { SkillType, CommunitySkill } from '@devdigest/shared';
 import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
 import { NotFoundError } from '../../platform/errors.js';
@@ -75,7 +75,15 @@ export default async function skillsRoutes(appBase: FastifyInstance) {
   });
 
   // Must be before /skills/:id
-  app.get('/skills/community', async () => []);
+  // Not implemented yet — always [] until a community catalog exists. The
+  // response schema pins the eventual shape (CommunitySkill[]) now, so a
+  // future implementation can't accidentally return something the client
+  // doesn't expect without the schema itself flagging the mismatch.
+  app.get(
+    '/skills/community',
+    { schema: { response: { 200: z.array(CommunitySkill) } } },
+    async () => [],
+  );
 
   app.get('/skills/:id', { schema: { params: IdParams } }, async (req) => {
     const { workspaceId } = await getContext(app.container, req);

@@ -5,6 +5,16 @@ Newest first. See `.claude/skills/engineering-insights/SKILL.md` for what belong
 
 ---
 
+## 2026-07-01 — Mutation error toasts are wired globally; a missing local `onError` is not a bug
+
+`client/src/lib/providers.tsx`'s `QueryClient` registers `mutationCache: new MutationCache({ onError: (err) => notify.error(errorMessage(err)) })` — **every** `useMutation` failure anywhere in the app already surfaces a toast, unconditionally, regardless of whether that specific call site passes its own `onError`. TanStack Query runs cache-level and call-level callbacks together (neither suppresses the other), so `someMutation.mutate(vars, { onSuccess })` with no `onError` is not missing error handling — it's relying on the already-wired global one instead of duplicating it. This has been misdiagnosed as a bug three separate times in review passes on the skills feature (`AddSkillDrawer`/`CreateSkillModal`'s imports, `SkillsTab`'s optimistic mutations) before being caught.
+
+**How to apply:** before flagging "mutation X has no `onError` / no error feedback," check `providers.tsx` for the global `MutationCache` handler first. A LOCAL `onError` is only needed when a mutation needs something the global toast doesn't do — reverting optimistic local state (see the `isPending`-guard insight above), closing/resetting a form only on success (already the pattern everywhere), or a more specific message than the raw API error.
+
+**Evidence:** `client/src/lib/providers.tsx:41` (`mutationCache`), `client/src/app/skills/_components/SkillsView/AddSkillDrawer.tsx` / `CreateSkillModal.tsx` (import mutations with no local `onError` — correct as-is).
+
+---
+
 ## 2026-07-01 — Guard every mutation-triggering handler on `isPending`, not just the obvious one
 
 `SkillsTab`'s `handleToggle` correctly checked `setAgentSkills.isPending` before firing a mutation, but `handleDragEnd` didn't — `draggable` rows have no built-in disabled state, so a user could drop a drag reorder while a toggle mutation from a moment earlier was still in flight, firing a second concurrent `setAgentSkills` mutation. Two in-flight mutations each carry a full order snapshot and each has its own `onError` rollback target (a `previousOrder`/`preDragOrderRef` snapshot) — whichever fails can revert to a snapshot that no longer agrees with the other's in-progress change, and the server itself just serializes whichever response lands last. Fixed by guarding `handleDragStart` on `isPending` (which also blocks `handleDragOver`, since it no-ops when `dragIndexRef.current` stays `null`), plus a defense-in-depth check in `handleDragEnd` itself.

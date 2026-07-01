@@ -76,6 +76,30 @@ describe('isBlockedIPv6', () => {
     expect(isBlockedIPv6('2606:4700:4700::1111')).toBe(false);
   });
 
+  it('blocks loopback/link-local/unique-local regardless of which equivalent textual form is given', () => {
+    // IPv6 has many equivalent textual representations for the same
+    // address — a bare string check ("::1", "fe80" prefix, etc.) only
+    // catches whichever form it was written against. Node's dns.lookup()
+    // always returns RFC 5952 canonical (compressed) form in practice, but
+    // this function is exported and may see other input in the future.
+    expect(isBlockedIPv6('0:0:0:0:0:0:0:1')).toBe(true); // fully expanded loopback
+    expect(isBlockedIPv6('0000:0000:0000:0000:0000:0000:0000:0001')).toBe(true); // zero-padded loopback
+    expect(isBlockedIPv6('fe80:0:0:0:0:0:0:1')).toBe(true); // partially expanded link-local
+    expect(isBlockedIPv6('fc00:0000:0000:0000:0000:0000:0000:0001')).toBe(true); // expanded unique-local
+  });
+
+  it('blocks the unspecified address (::) in both compressed and expanded forms', () => {
+    expect(isBlockedIPv6('::')).toBe(true);
+    expect(isBlockedIPv6('0:0:0:0:0:0:0:0')).toBe(true);
+    expect(isBlockedIPv6('0000:0000:0000:0000:0000:0000:0000:0000')).toBe(true);
+  });
+
+  it('fails closed (blocks) on an unparseable address rather than letting it through', () => {
+    expect(isBlockedIPv6('not-an-ipv6-address')).toBe(true);
+    expect(isBlockedIPv6('1:2:3::4:5:6:7:8')).toBe(true); // "::" with no groups to compress
+    expect(isBlockedIPv6('gggg::1')).toBe(true); // invalid hex digits
+  });
+
   it('blocks IPv4-mapped IPv6 addresses that resolve to a private range', () => {
     expect(isBlockedIPv6('::ffff:10.0.0.1')).toBe(true);
     expect(isBlockedIPv6('::ffff:127.0.0.1')).toBe(true);

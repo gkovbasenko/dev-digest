@@ -20,21 +20,57 @@ export function isBlockedIPv4(ip: string): boolean {
   return BLOCKED_CIDRS.some(({ base, mask }) => (addr & mask) >>> 0 === base);
 }
 
+// Expands any valid textual IPv6 form (compressed via "::", fully written
+// out, or a mix) to 8 lowercase, zero-padded 4-digit hex groups. IPv6 has
+// many equivalent textual representations for the same address (::1 vs
+// 0:0:0:0:0:0:0:1, etc.) — comparing/pattern-matching the raw string only
+// catches whichever form happens to be checked for; expanding first makes
+// every check below correct regardless of which form was given. Returns
+// null for anything unparseable, which the caller treats as blocked
+// (fail closed — an address we can't confidently classify isn't "safe").
+function expandIPv6(ip: string): string[] | null {
+  const parts = ip.split('::');
+  if (parts.length > 2) return null; // more than one "::" is never valid
+  let groups: string[];
+  if (parts.length === 1) {
+    groups = parts[0]!.split(':');
+    if (groups.length !== 8) return null;
+  } else {
+    const head = parts[0] ? parts[0].split(':') : [];
+    const tail = parts[1] ? parts[1].split(':') : [];
+    const missing = 8 - head.length - tail.length;
+    if (missing < 1) return null; // "::" must compress at least one group
+    groups = [...head, ...Array(missing).fill('0'), ...tail];
+  }
+  if (groups.some((g) => !/^[0-9a-f]{1,4}$/.test(g))) return null;
+  return groups.map((g) => g.padStart(4, '0'));
+}
+
 export function isBlockedIPv6(ip: string): boolean {
   const norm = ip.toLowerCase().replace(/^\[|\]$/g, '');
   const ipv4Mapped = norm.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
   if (ipv4Mapped?.[1]) {
     return isBlockedIPv4(ipv4Mapped[1]);
   }
-  if (norm === '::1') return true;
-  if (norm.startsWith('fc') || norm.startsWith('fd')) return true; // unique-local fc00::/7 (fc00-fdff)
+
+  const groups = expandIPv6(norm);
+  if (!groups) return true;
+
+  // Loopback (::1) and unspecified (::) — any textual form (including fully
+  // expanded, e.g. 0:0:0:0:0:0:0:1) normalizes to the same 8 groups here.
+  if (groups.slice(0, 7).every((g) => g === '0000') && (groups[7] === '0001' || groups[7] === '0000')) {
+    return true;
+  }
+
+  // Unique-local fc00::/7 (fc00-fdff) — a 7-bit prefix that happens to split
+  // evenly across the two hex values fc/fd, so a prefix check on the
+  // (now-normalized) first group is exact, not a coincidence-of-width bug.
+  if (groups[0]!.startsWith('fc') || groups[0]!.startsWith('fd')) return true;
 
   // Link-local fe80::/10 spans first-hextet values fe80-febf — a 10-bit
-  // prefix doesn't land on a hex-digit boundary, so a string prefix check
-  // ("fe80") only matches the literal value fe80 and misses fe81-febf
-  // (e.g. fe90::1, febf::1). Mask the first hextet's bits instead.
-  const firstHextet = parseInt(norm.split(':')[0] || '', 16);
-  if (!Number.isNaN(firstHextet) && (firstHextet & 0xffc0) === 0xfe80) return true;
+  // prefix doesn't land on a hex-digit boundary, so mask the bits instead
+  // of string-prefix-matching (which would only catch the literal "fe80").
+  if ((parseInt(groups[0]!, 16) & 0xffc0) === 0xfe80) return true;
 
   return false;
 }

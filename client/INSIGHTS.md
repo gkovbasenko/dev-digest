@@ -5,6 +5,16 @@ Newest first. See `.claude/skills/engineering-insights/SKILL.md` for what belong
 
 ---
 
+## 2026-07-02 — `Markdown` (`vendor/ui/primitives/Markdown.tsx`) is safe against raw-HTML injection, but link hrefs need explicit scheme sanitization
+
+`Markdown` uses `react-markdown` with only `remarkGfm` — no `rehype-raw` plugin (not even installed: check `client/package.json` before assuming otherwise). Without `rehype-raw`, raw HTML in the markdown source (`<script>`, `<img onerror=...>`) is rendered as literal escaped text, never executed — verified with actual `<script>`/`<img onerror>` payloads through the real component, not just by reading the plugin list. This makes it safe by default for untrusted content (e.g. imported skill bodies). It does NOT sanitize link URL schemes on its own though — the custom `a` renderer passed `href` straight through to a real `<a>` tag, so a `[click](javascript:...)` or `[click](data:text/html,...)` link in untrusted markdown would still execute on click. Fixed with a `safeHref()` allowlist (http/https/mailto only) in the `a` renderer.
+
+**How to apply:** when reviewing "does X markdown renderer allow XSS," check for `rehype-raw` (or equivalent raw-HTML-passthrough plugin) specifically — its absence is the actual safety boundary, not "react-markdown is generally safe." Separately, always verify link scheme handling in any custom link renderer; `react-markdown` itself does not strip dangerous schemes.
+
+**Evidence:** `client/src/vendor/ui/primitives/Markdown.tsx` (`safeHref`), `Markdown.test.tsx` (raw-HTML-not-rendered tests, href-sanitization tests); `client/package.json` has `react-markdown` but no `rehype-raw`.
+
+---
+
 ## 2026-07-02 — Confirming before a `key`-remount discards child state needs a ref+callback, not lifted state
 
 `SkillsView` renders `<SkillPreview key={selectedSkill.id} skill={selectedSkill} />` — switching skills remounts a fresh `SkillPreview` instance (correct, since editor state shouldn't carry over between skills). But this means the PARENT can't simply check the child's `editing`/`body` state before allowing a switch — by the time a click handler in the parent would want to ask "is there an unsaved edit?", the relevant state lives in a component instance about to be discarded, and the parent has no synchronous way to inspect it. The fix: `SkillPreview` takes an `onDirtyChange?: (dirty: boolean) => void` prop and reports `editing && body !== skill.body` via a `useEffect` (also firing on unmount, so a stale `true` can't outlive the instance); the parent stores this in a `ref` (not state — it's only read at click time, not rendered) and checks the ref before calling `setSelected(id)`, showing `window.confirm(...)` if dirty.

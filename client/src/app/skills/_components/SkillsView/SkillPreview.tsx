@@ -28,8 +28,14 @@ export function SkillPreview({ skill }: { skill: Skill }) {
   const typeColor = TYPE_COLORS[skill.type] ?? TYPE_COLORS.custom;
   const isUntrusted = skill.source !== "manual";
 
-  const toggleEnabled = () =>
+  const toggleEnabled = () => {
+    // Without this guard, a second click before the first mutation's
+    // onSuccess updates the cache would recompute !skill.enabled from the
+    // same stale prop value and send the same patch again — silently
+    // swallowing the user's intent to toggle back.
+    if (update.isPending) return;
     update.mutate({ id: skill.id, patch: { enabled: !skill.enabled } });
+  };
 
   const saveBody = () =>
     update.mutate(
@@ -52,7 +58,7 @@ export function SkillPreview({ skill }: { skill: Skill }) {
           {isUntrusted && (
             <Badge color="#f59e0b" bg="rgba(245,158,11,0.12)">untrusted source</Badge>
           )}
-          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--text-secondary)" }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--text-secondary)", opacity: update.isPending ? 0.6 : 1 }}>
             {skill.enabled ? "Enabled" : "Disabled"}
             <Toggle on={skill.enabled} onChange={toggleEnabled} size={16} />
           </label>

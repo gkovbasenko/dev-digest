@@ -62,10 +62,21 @@ export async function fetchSkillUrl(rawUrl: string): Promise<string> {
   // fetch() performs its own DNS resolution independently of the check above, so
   // an attacker-controlled DNS server could answer safely here and privately
   // (e.g. 127.0.0.1) at request time — classic DNS rebinding.
+  //
+  // Node's connector can invoke `lookup` in "return all records" mode
+  // (`options.all`, used by its Happy-Eyeballs dual-stack connect logic) as well
+  // as the single-address mode — the callback shape differs between the two
+  // (`(err, addresses[])` vs `(err, address, family)`). Handling only the
+  // single-address form throws `ERR_INVALID_IP_ADDRESS` when Node requests the
+  // array form.
   const pinnedDispatcher = new Agent({
     connect: {
-      lookup: (_hostname, _options, callback) => {
-        callback(null, address, family);
+      lookup: (_hostname, options, callback) => {
+        if (options?.all) {
+          callback(null, [{ address, family }]);
+        } else {
+          callback(null, address, family);
+        }
       },
     },
   });
@@ -80,7 +91,8 @@ export async function fetchSkillUrl(rawUrl: string): Promise<string> {
       dispatcher: pinnedDispatcher,
     });
   } catch (err) {
-    if (err instanceof TypeError) {
+    const cause = err instanceof Error ? err.cause : undefined;
+    if (cause instanceof Error && /redirect/i.test(cause.message)) {
       throw new Error('Skill URL redirects are not allowed');
     }
     throw err;

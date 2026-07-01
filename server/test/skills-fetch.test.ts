@@ -186,14 +186,50 @@ describe('fetchSkillUrl', () => {
     expect(lookupCallback).toHaveBeenCalledWith(null, '93.184.216.34', 4);
   });
 
+  it('pinned lookup also handles the "all records" callback form Node uses for dual-stack connect', async () => {
+    // Node's net connector can call `lookup` with `{ all: true }` (its
+    // Happy-Eyeballs dual-stack logic), which expects back an array of
+    // {address, family} records instead of a single (address, family) pair.
+    // Getting this wrong doesn't surface in mocked-fetch tests — it only
+    // breaks against a real socket connect, throwing ERR_INVALID_IP_ADDRESS.
+    mockLookup.mockResolvedValue({ address: '93.184.216.34', family: 4 });
+    mockFetch('# My Skill');
+
+    await fetchSkillUrl('https://example.com/skill.md');
+
+    const agentOpts = mockAgentCtor.mock.calls[0][0];
+    const lookupCallback = vi.fn();
+    agentOpts.connect.lookup('attacker-controlled.evil', { all: true }, lookupCallback);
+    expect(lookupCallback).toHaveBeenCalledWith(null, [{ address: '93.184.216.34', family: 4 }]);
+  });
+
   it('rejects redirects instead of following them to an internal host', async () => {
     mockLookup.mockResolvedValue({ address: '93.184.216.34', family: 4 });
+    // Matches undici's actual shape for redirect: 'error' — verified against a
+    // real local HTTP server issuing a 302: the outer error is always
+    // `TypeError: fetch failed`, with the real reason on `.cause`.
     vi.stubGlobal(
       'fetch',
-      vi.fn().mockRejectedValue(new TypeError('fetch failed: unexpected redirect')),
+      vi.fn().mockRejectedValue(new TypeError('fetch failed', { cause: new Error('unexpected redirect') })),
     );
     await expect(fetchSkillUrl('https://example.com/redirects-me.md')).rejects.toThrow(
       'redirects are not allowed',
     );
+  });
+
+  it('does not mask an unrelated fetch failure as a redirect error', async () => {
+    mockLookup.mockResolvedValue({ address: '93.184.216.34', family: 4 });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockRejectedValue(new TypeError('fetch failed', { cause: new Error('ECONNRESET') })),
+    );
+    // Must NOT be reworded to the misleading "redirects are not allowed" —
+    // the original error (with its real cause) is rethrown as-is.
+    await expect(fetchSkillUrl('https://example.com/flaky.md')).rejects.not.toThrow(
+      'redirects are not allowed',
+    );
+    await expect(fetchSkillUrl('https://example.com/flaky.md')).rejects.toMatchObject({
+      cause: expect.objectContaining({ message: 'ECONNRESET' }),
+    });
   });
 });

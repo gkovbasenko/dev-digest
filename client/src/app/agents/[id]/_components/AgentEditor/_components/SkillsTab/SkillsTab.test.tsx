@@ -2,12 +2,15 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import type { Skill, AgentSkillLink } from "@devdigest/shared";
 
-const { mockMutate } = vi.hoisted(() => ({ mockMutate: vi.fn() }));
+const { mockMutate, mockIsPending } = vi.hoisted(() => ({
+  mockMutate: vi.fn(),
+  mockIsPending: { current: false },
+}));
 
 vi.mock("../../../../../../../lib/hooks/skills", () => ({
   useSkills: () => ({ data: SKILLS }),
   useAgentSkills: () => ({ data: LINKS }),
-  useSetAgentSkills: () => ({ mutate: mockMutate, isPending: false }),
+  useSetAgentSkills: () => ({ mutate: mockMutate, isPending: mockIsPending.current }),
 }));
 
 import { SkillsTab } from "./SkillsTab";
@@ -93,5 +96,19 @@ describe("SkillsTab — optimistic rollback on mutation failure", () => {
 
     expect(screen.getAllByText("Skill B")).toHaveLength(1);
     expect(screen.getAllByRole("checkbox")).toHaveLength(2);
+  });
+
+  it("does not start a new drag gesture (and so never fires a second mutation) while a mutation is already pending", () => {
+    mockMutate.mockReset();
+    mockIsPending.current = true;
+
+    render(<SkillsTab agentId="ag1" />);
+    const linkedRow = screen.getByText("Skill A").closest("[draggable]")!;
+
+    fireEvent.dragStart(linkedRow);
+    fireEvent.dragEnd(linkedRow);
+
+    expect(mockMutate).not.toHaveBeenCalled();
+    mockIsPending.current = false;
   });
 });

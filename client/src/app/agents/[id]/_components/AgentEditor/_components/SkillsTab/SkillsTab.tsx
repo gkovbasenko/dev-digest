@@ -80,6 +80,13 @@ export function SkillsTab({ agentId }: { agentId: string }) {
 
   // Drag handlers for reordering linked skills
   const handleDragStart = (idx: number) => {
+    // Don't start a new drag gesture while a mutation (toggle or a prior
+    // drag) is still in flight — handleDragOver no-ops when dragIndexRef.current
+    // stays null, so this alone blocks the whole gesture. Without this, a
+    // drop could fire a second setAgentSkills mutation concurrently with the
+    // first, and the two onError rollbacks would target snapshots that no
+    // longer agree with each other.
+    if (setAgentSkills.isPending) return;
     dragIndexRef.current = idx;
     preDragOrderRef.current = localOrder;
   };
@@ -97,6 +104,9 @@ export function SkillsTab({ agentId }: { agentId: string }) {
 
   const handleDragEnd = () => {
     dragIndexRef.current = null;
+    // Defense in depth alongside the isPending guard in handleDragStart: if a
+    // mutation somehow became pending mid-gesture, don't fire a second one.
+    if (setAgentSkills.isPending) return;
     const previousOrder = preDragOrderRef.current;
     // Commit the new order to the server; revert to the pre-drag order if it
     // fails so the list doesn't keep showing a reorder that was never saved.

@@ -5,6 +5,16 @@ Newest first. See `.claude/skills/engineering-insights/SKILL.md` for what belong
 
 ---
 
+## 2026-07-01 — Guard every mutation-triggering handler on `isPending`, not just the obvious one
+
+`SkillsTab`'s `handleToggle` correctly checked `setAgentSkills.isPending` before firing a mutation, but `handleDragEnd` didn't — `draggable` rows have no built-in disabled state, so a user could drop a drag reorder while a toggle mutation from a moment earlier was still in flight, firing a second concurrent `setAgentSkills` mutation. Two in-flight mutations each carry a full order snapshot and each has its own `onError` rollback target (a `previousOrder`/`preDragOrderRef` snapshot) — whichever fails can revert to a snapshot that no longer agrees with the other's in-progress change, and the server itself just serializes whichever response lands last. Fixed by guarding `handleDragStart` on `isPending` (which also blocks `handleDragOver`, since it no-ops when `dragIndexRef.current` stays `null`), plus a defense-in-depth check in `handleDragEnd` itself.
+
+**How to apply:** when a component has more than one gesture that can trigger the same mutation (a click AND a drag, for example), audit ALL of them for the pending guard — copying the guard onto only the first one you write is easy to forget for the others, especially when the second gesture (drag) is spread across three separate handlers (start/over/end) instead of one click handler.
+
+**Evidence:** `client/src/app/agents/[id]/_components/AgentEditor/_components/SkillsTab/SkillsTab.tsx` (`handleDragStart`/`handleDragEnd`), `SkillsTab.test.tsx` ("does not start a new drag gesture...while a mutation is already pending" test).
+
+---
+
 ## 2026-07-01 — Optimistic list-membership state must derive `linkedIds` from local state, not server-truth, during the pending window
 
 `SkillsTab` had `linkedIds` derived from `useAgentSkills()`'s `linkedLinks` (server truth), while `linkedSkills` (the "linked" list) was derived from `localOrder` (the optimistic local state updated immediately on toggle/drag, before the mutation resolves). Between clicking a checkbox and the mutation settling, `localOrder` is ahead of `linkedLinks` — so a just-linked skill showed up in BOTH the linked list (via `localOrder`) AND the unlinked list (via stale `linkedIds`) simultaneously, and a just-unlinked skill vanished from both. Fixed by deriving `linkedIds` from `localOrder` (`new Set(localOrder)`) so both derived lists agree on the same live source during the optimistic window.

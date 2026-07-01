@@ -5,6 +5,18 @@ Newest first. See `.claude/skills/engineering-insights/SKILL.md` for what belong
 
 ---
 
+## 2026-07-02 — There is no multi-user auth yet; "missing workspace membership check" findings on repository methods are false positives
+
+`getContext()` (`modules/_shared/context.ts`) resolves `{ workspaceId, userId }` via `container.auth`, and the only `AuthProvider` today is `LocalNoAuthProvider` (`adapters/auth/local.ts`) — explicit MVP no-login mode. Its `currentWorkspace()`/`currentUser()` either return the single seeded workspace/user (real DB-backed UUIDs) or **throw** (`if (!w) throw new Error(...)`); they never return `undefined`/`null`/empty-string, and `Promise<AuthWorkspace>` types `id: string` as non-optional. Every route in every module derives `workspaceId` exclusively from `getContext()` — never from a URL param, header, or body — so there is no user-controlled input path to a wrong or missing `workspaceId` either.
+
+Given this, a review finding of the form "repository method X trusts the caller's `workspaceId` with no membership check, so a future JWT/multi-tenant bypass could leak data across workspaces" is *architecturally* describing the right future concern (when real multi-user auth ships, `getContext()` is the one place that needs a membership check) but is **not a bug in the current code** — there's no JWT, no `workspace_members` table, and no reachable path where `workspaceId` is attacker-controlled or falls through to an unscoped query today. This has been raised and rejected twice across review rounds on the skills module (once framed as "IDOR via JWT," once as "no built-in guarantee workspaceId links to the authenticated user").
+
+**How to apply:** before accepting this class of finding, check `adapters/auth/local.ts` and confirm it's still the only registered `AuthProvider`, and check the route file to confirm `workspaceId` still comes only from `getContext()`. If both hold, the finding is speculative (correct advice for a future auth model, not a present defect) — note it for when real auth ships, don't "fix" the repository layer for it now.
+
+**Evidence:** `server/src/adapters/auth/local.ts` (`LocalNoAuthProvider`), `server/src/modules/_shared/context.ts` (`getContext`), `server/src/modules/skills/routes.ts` (every route calls `getContext` before any repository access, no route accepts `workspaceId` as input).
+
+---
+
 ## 2026-07-01 — `assemblePrompt`'s `skills` param is NOT delimiter-wrapped like every other untrusted input — wire this up carefully
 
 `reviewer-core/src/prompt.ts`'s `assemblePrompt` wraps every other untrusted content type (diff, PR description, repo map, callers, specs) via `wrapUntrusted()`, so the `INJECTION_GUARD` system rule (which only recognizes `<untrusted>…</untrusted>` tags) covers them. `parts.skills` is the one exception — its bodies are joined and inserted under `## Skills / rules` completely unwrapped, because the type comment calls them "trusted-ish." Separately, `server/src/modules/skills/service.ts` wraps imported (URL or pasted-markdown) skill bodies in `<!-- BEGIN/END UNTRUSTED SKILL -->` HTML comments — a *different* delimiter scheme that `INJECTION_GUARD` doesn't know about at all, and skills stay `enabled: false` until a human vets them.

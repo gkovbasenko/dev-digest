@@ -141,7 +141,10 @@ export async function fetchSkillUrl(rawUrl: string): Promise<string> {
     // This dispatcher is scoped to a single request (its `lookup` is pinned to
     // one already-validated address) — nothing else can reuse its connection
     // pool, so close it immediately rather than leaving a keep-alive socket
-    // open until undici's own idle timeout.
-    await pinnedDispatcher.close();
+    // open until undici's own idle timeout. Swallow any close() rejection: a
+    // throw here would replace whatever error the try block was already
+    // propagating (or the successful return value), masking the real outcome
+    // with an unrelated cleanup failure.
+    await pinnedDispatcher.close().catch(() => {});
   }
 }

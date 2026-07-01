@@ -292,6 +292,30 @@ describe('fetchSkillUrl', () => {
     expect(dispatcher.close).toHaveBeenCalledTimes(1);
   });
 
+  it('a rejecting dispatcher.close() does not mask the real error from the try block', async () => {
+    mockLookup.mockResolvedValue({ address: '93.184.216.34', family: 4 });
+    mockAgentCtor.mockImplementation(() => ({
+      close: vi.fn().mockRejectedValue(new Error('close() blew up')),
+    }));
+    mockFetch('Not found', 404);
+
+    // Without swallowing close()'s rejection, this would surface as
+    // "close() blew up" instead of the real 404 failure.
+    await expect(fetchSkillUrl('https://example.com/missing.md')).rejects.toThrow(
+      'Could not fetch skill URL: 404',
+    );
+  });
+
+  it('a rejecting dispatcher.close() does not mask a successful result', async () => {
+    mockLookup.mockResolvedValue({ address: '93.184.216.34', family: 4 });
+    mockAgentCtor.mockImplementation(() => ({
+      close: vi.fn().mockRejectedValue(new Error('close() blew up')),
+    }));
+    mockFetch('# My Skill');
+
+    await expect(fetchSkillUrl('https://example.com/skill.md')).resolves.toContain('# My Skill');
+  });
+
   it('a rejecting reader.cancel() on the size-limit path does not surface as an unhandled rejection', async () => {
     mockLookup.mockResolvedValue({ address: '93.184.216.34', family: 4 });
     const bigChunk = new TextEncoder().encode('x'.repeat(2 * 1024 * 1024));

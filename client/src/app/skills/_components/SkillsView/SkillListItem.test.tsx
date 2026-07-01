@@ -69,6 +69,27 @@ describe("SkillListItem", () => {
     expect(onClick).toHaveBeenCalledOnce();
   });
 
+  it("calls onClick on Enter", () => {
+    const onClick = vi.fn();
+    render(<SkillListItem skill={BASE_SKILL} active={false} onClick={onClick} />);
+    fireEvent.keyDown(screen.getByRole("button"), { key: "Enter" });
+    expect(onClick).toHaveBeenCalledOnce();
+  });
+
+  it("calls onClick on Space (role=button must respond to both per ARIA)", () => {
+    const onClick = vi.fn();
+    render(<SkillListItem skill={BASE_SKILL} active={false} onClick={onClick} />);
+    fireEvent.keyDown(screen.getByRole("button"), { key: " " });
+    expect(onClick).toHaveBeenCalledOnce();
+  });
+
+  it("does not call onClick for unrelated keys", () => {
+    const onClick = vi.fn();
+    render(<SkillListItem skill={BASE_SKILL} active={false} onClick={onClick} />);
+    fireEvent.keyDown(screen.getByRole("button"), { key: "Tab" });
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
   it("renders all four type badges correctly", () => {
     const types = ["rubric", "convention", "security", "custom"] as const;
     types.forEach((type) => {

@@ -5,6 +5,16 @@ Newest first. See `.claude/skills/engineering-insights/SKILL.md` for what belong
 
 ---
 
+## 2026-07-01 — Mocking a TanStack Query hook with `() => ({ data: [] })` can OOM-crash the test worker
+
+`SkillsTab` has `useEffect(() => { ...; setLocalOrder(...) }, [linkedLinks])`, relying on `useAgentSkills()`'s `data` keeping a stable reference across renders — which the real TanStack Query hook does once a query settles. `AgentEditor.test.tsx` originally mocked it as `useAgentSkills: () => ({ data: [] })`: a fresh `[]` literal is a new reference every call, so the effect's dependency check never bails out — effect runs → `setLocalOrder` → re-render → hook called again → new `[]` → effect runs again, forever. This doesn't reproduce in production (React Query memoizes `data`), only in tests with a naive per-call mock; it reliably drove the Vitest worker to `FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory` and crashed the whole run — not a test failure, so it's easy to mistake for an unrelated environment/OOM flake.
+
+**How to apply:** when mocking a query hook that a component depends on via a `useEffect` dependency array, return a **stable, module-scoped** array/object reference (`vi.hoisted(() => ({ EMPTY: [] }))`, then `() => ({ data: EMPTY })`) — never a fresh literal per call. If a `useEffect` in a component takes `data` as a dependency, always ask whether the mock's `data` reference is stable across renders before assuming a hang/crash is unrelated to the mock.
+
+**Evidence:** `client/src/app/agents/[id]/_components/AgentEditor/_components/SkillsTab/SkillsTab.tsx` (`useEffect` keyed on `linkedLinks`), `client/src/app/agents/[id]/_components/AgentEditor/AgentEditor.test.tsx` (fixed via `vi.hoisted`); reproduced by running the file in isolation — `npx vitest run AgentEditor.test.tsx` hit the Node heap limit before the fix.
+
+---
+
 ## 2026-07-01 — `AgentEditor` body container has `padding: 28`; tabs with internal scroll need `tabBody` instead
 
 `s.body` in `AgentEditor/styles.ts` applies `padding: 28` and `overflow: auto` — fine for `ConfigTab`, which renders a scrollable form inside. Any tab that manages its own internal scroll and padding (e.g. `SkillsTab` with a sticky header, scrollable list, and sticky footer) must use `s.tabBody` instead: `{ flex: 1, overflow: auto, display: flex, flexDirection: column, minHeight: 0 }` — no outer padding, so the tab controls its own layout without double-padding.

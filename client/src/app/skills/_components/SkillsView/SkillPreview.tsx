@@ -26,7 +26,7 @@ export function SkillPreview({ skill }: { skill: Skill }) {
   }, [skill.id]);
 
   const typeColor = TYPE_COLORS[skill.type] ?? TYPE_COLORS.custom;
-  const isUntrusted = skill.source === "imported_url";
+  const isUntrusted = skill.source !== "manual";
 
   const toggleEnabled = () =>
     update.mutate({ id: skill.id, patch: { enabled: !skill.enabled } });

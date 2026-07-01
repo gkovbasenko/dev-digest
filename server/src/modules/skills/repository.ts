@@ -67,27 +67,44 @@ export class SkillsRepository {
     id: string,
     patch: UpdateSkill,
   ): Promise<SkillRow | undefined> {
-    const existing = await this.getById(workspaceId, id);
-    if (!existing) return undefined;
+    // Two concurrent PUTs on the same skill would otherwise both read the same
+    // `existing.version`, both compute the same `nextVersion`, and the second
+    // version-snapshot insert would silently no-op on the (skillId, version)
+    // conflict — dropping one editor's body from history. SELECT ... FOR UPDATE
+    // inside a transaction serializes concurrent updates on this row so the
+    // second transaction sees the first's already-incremented version.
+    return this.db.transaction(async (tx) => {
+      const [existing] = await tx
+        .select()
+        .from(t.skills)
+        .where(and(eq(t.skills.workspaceId, workspaceId), eq(t.skills.id, id)))
+        .for('update');
+      if (!existing) return undefined;
 
-    const bodyChanged = patch.body !== undefined && patch.body !== existing.body;
-    const nextVersion = bodyChanged ? existing.version + 1 : existing.version;
+      const bodyChanged = patch.body !== undefined && patch.body !== existing.body;
+      const nextVersion = bodyChanged ? existing.version + 1 : existing.version;
 
-    const [row] = await this.db
-      .update(t.skills)
-      .set({
-        ...(patch.name !== undefined ? { name: patch.name } : {}),
-        ...(patch.description !== undefined ? { description: patch.description } : {}),
-        ...(patch.type !== undefined ? { type: patch.type } : {}),
-        ...(patch.body !== undefined ? { body: patch.body } : {}),
-        ...(patch.enabled !== undefined ? { enabled: patch.enabled } : {}),
-        ...(bodyChanged ? { version: nextVersion } : {}),
-      })
-      .where(and(eq(t.skills.workspaceId, workspaceId), eq(t.skills.id, id)))
-      .returning();
+      const [row] = await tx
+        .update(t.skills)
+        .set({
+          ...(patch.name !== undefined ? { name: patch.name } : {}),
+          ...(patch.description !== undefined ? { description: patch.description } : {}),
+          ...(patch.type !== undefined ? { type: patch.type } : {}),
+          ...(patch.body !== undefined ? { body: patch.body } : {}),
+          ...(patch.enabled !== undefined ? { enabled: patch.enabled } : {}),
+          ...(bodyChanged ? { version: nextVersion } : {}),
+        })
+        .where(and(eq(t.skills.workspaceId, workspaceId), eq(t.skills.id, id)))
+        .returning();
 
-    if (bodyChanged && row) await this.snapshotVersion(row.id, nextVersion, row.body);
-    return row;
+      if (bodyChanged && row) {
+        await tx
+          .insert(t.skillVersions)
+          .values({ skillId: row.id, version: nextVersion, body: row.body })
+          .onConflictDoNothing();
+      }
+      return row;
+    });
   }
 
   async deleteById(workspaceId: string, id: string): Promise<boolean> {

@@ -5,17 +5,39 @@ Newest first. See `.claude/skills/engineering-insights/SKILL.md` for what belong
 
 ---
 
+## 2026-07-01 — `assemblePrompt`'s `skills` param is NOT delimiter-wrapped like every other untrusted input — wire this up carefully
+
+`reviewer-core/src/prompt.ts`'s `assemblePrompt` wraps every other untrusted content type (diff, PR description, repo map, callers, specs) via `wrapUntrusted()`, so the `INJECTION_GUARD` system rule (which only recognizes `<untrusted>…</untrusted>` tags) covers them. `parts.skills` is the one exception — its bodies are joined and inserted under `## Skills / rules` completely unwrapped, because the type comment calls them "trusted-ish." Separately, `server/src/modules/skills/service.ts` wraps imported (URL or pasted-markdown) skill bodies in `<!-- BEGIN/END UNTRUSTED SKILL -->` HTML comments — a *different* delimiter scheme that `INJECTION_GUARD` doesn't know about at all, and skills stay `enabled: false` until a human vets them.
+
+No code currently reads `AgentSkillLink`/skill bodies into a review run — `run-executor.ts`'s call to `reviewPullRequest()` never passes a `skills` array (confirmed: `skillLinks()` is only read by the agent-editor CRUD routes). So there is no live bug today. But whoever wires skills into actual agent runs must NOT simply pass `enabled` skill bodies straight into `parts.skills`: (1) only pass `enabled: true` skills — the `enabled` flag is the vetting gate; (2) either strip `UNTRUSTED_SKILL_START`/`END` before passing (if vetting = trust), or route the skill through `wrapUntrusted()` like every other untrusted input instead of the HTML-comment markers (if imported skills should stay untrusted even once enabled) — don't ship the HTML-comment-wrapped body straight into a prompt section the injection guard doesn't cover.
+
+**Evidence:** `reviewer-core/src/prompt.ts:42-43` (`skills?: string[]` comment + unwrapped `skillsBlock`), `server/src/modules/skills/service.ts` (`wrapUntrusted`, `UNTRUSTED_SKILL_START/END`), `server/src/modules/reviews/run-executor.ts:191-210` (no `skills` passed to `reviewPullRequest`), flagged in post-PR review at 90% confidence (finding assumed the wiring already existed; verified it doesn't).
+
+---
+
+## 2026-07-01 — Drizzle read-then-write `update()` needs `SELECT ... FOR UPDATE` in a transaction, not a bare read + write
+
+`SkillsRepository.update()` read `existing.version` via a plain `SELECT`, computed `nextVersion = existing.version + 1` in application code, then issued an `UPDATE` with no `WHERE version = existing.version` guard. Two concurrent `PUT /skills/:id` calls on the same skill both read the same starting version, both compute the same `nextVersion`, and the second `skillVersions` snapshot insert silently no-ops on the `(skillId, version)` primary-key conflict (`onConflictDoNothing()`) — one editor's body vanishes from version history with no error. Fixed by wrapping the read+write in `this.db.transaction()` with `.select().for('update')`: Postgres row-locks the skill row for the transaction's duration, so a second concurrent transaction blocks until the first commits, then reads the already-incremented version — guaranteeing distinct version numbers and no dropped snapshot. Verified against a live Postgres instance (not just mocked): two concurrent `update()` calls produced versions 2 and 3 with both bodies present in `skill_versions`, not both landing on 2.
+
+**How to apply:** any repository method that reads a row, derives a value from it (a counter, a version, an aggregate), and writes it back must either use `SELECT ... FOR UPDATE` inside a transaction or push the increment into the `UPDATE` statement itself (`SET version = version + 1`) — never read-compute-write as three separate unguarded statements.
+
+**Evidence:** `server/src/modules/skills/repository.ts` (`update()`), `server/test/skills-concurrency.it.test.ts`; testcontainers couldn't attach to this sandbox's Colima docker socket (log-wait-strategy timeout), so the fix was verified with a scratch script against the docker-compose Postgres instance directly before being committed as the `.it.test.ts`.
+
+---
+
 ## 2026-07-01 — `POST /skills/import` URL fetch requires SSRF protection; raw `fetch()` is unsafe
 
-Any server-side URL fetch driven by user input is an SSRF vector. `POST /skills/import` previously called `fetch(input.url)` with no validation beyond Zod's `z.string().url()` (syntax only). A workspace member could target `http://169.254.169.254/` (AWS metadata), `http://localhost:5432` (postgres), or any internal host. The fix in `server/src/modules/skills/service.ts` (`fetchSkillUrl()`) must be used for ALL future server-side URL fetches from user input:
+Any server-side URL fetch driven by user input is an SSRF vector. `POST /skills/import` previously called `fetch(input.url)` with no validation beyond Zod's `z.string().url()` (syntax only). A workspace member could target `http://169.254.169.254/` (AWS metadata), `http://localhost:5432` (postgres), or any internal host. The fix now lives in `server/src/modules/skills/fetch-skill.ts` (`fetchSkillUrl()`, moved out of `service.ts`) and must be used for ALL future server-side URL fetches from user input:
 1. Reject non-HTTPS protocols before DNS resolution.
-2. Resolve hostname via `dns.lookup()` and block private/reserved ranges before connecting.
-3. Enforce a short `AbortSignal.timeout()`.
-4. Cap response body size to prevent memory exhaustion.
+2. Resolve hostname via `dns.lookup()` and block private/reserved ranges before connecting — including IPv4-mapped IPv6 forms (`::ffff:10.0.0.1`), which `isBlockedIPv6` must unwrap and re-check against `isBlockedIPv4` rather than pattern-matching the IPv6 string directly.
+3. Pass `redirect: 'error'` to `fetch()` — the target host is only validated once, before the request; a 3xx to an internal host would otherwise be followed silently.
+4. Pin the actual connection to the validated address via a per-request `undici.Agent({ connect: { lookup } })` dispatcher whose `lookup` ignores the hostname it's given and always returns the address resolved in step 2. Without this, `fetch()` re-resolves the hostname itself at connect time, and an attacker-controlled DNS server can answer safely for the check but privately (e.g. `127.0.0.1`) for the real connection — classic DNS rebinding. `undici` is pinned to the `6.x` line in `server/package.json` to match the `undici-types` version bundled with `@types/node`; installing a newer `undici` major (e.g. 8.x) causes its `Dispatcher` type to structurally diverge from `RequestInit['dispatcher']` and fails `tsc`.
+5. Enforce a short `AbortSignal.timeout()`.
+6. Cap response body size to prevent memory exhaustion.
 
-**How to apply:** any future endpoint that fetches a user-supplied URL must go through `fetchSkillUrl()` or an equivalent — never raw `fetch(userInput)`.
+**How to apply:** any future endpoint that fetches a user-supplied URL must go through `fetchSkillUrl()` or an equivalent — never raw `fetch(userInput)`. When testing SSRF protections, don't just stub global `fetch` — that bypasses the dispatcher entirely and won't catch a regression in the pinning logic; assert on the `lookup` function passed to `Agent` directly (see the "pins the connection" test).
 
-**Evidence:** `server/src/modules/skills/service.ts` (`fetchSkillUrl`, PR #6 commit `b5c99de`), flagged at 95% confidence in post-PR security review.
+**Evidence:** `server/src/modules/skills/fetch-skill.ts` (`fetchSkillUrl`, `isBlockedIPv6`), `server/test/skills-fetch.test.ts` ("pins the connection to the DNS-validated address" test); originally landed PR #6 commit `b5c99de`, IPv4-mapped/redirect/rebinding gaps flagged in follow-up review at 75-90% confidence and closed same-session.
 
 ---
 

@@ -26,7 +26,17 @@ export function isBlockedIPv6(ip: string): boolean {
   if (ipv4Mapped?.[1]) {
     return isBlockedIPv4(ipv4Mapped[1]);
   }
-  return norm === '::1' || norm.startsWith('fc') || norm.startsWith('fd') || norm.startsWith('fe80');
+  if (norm === '::1') return true;
+  if (norm.startsWith('fc') || norm.startsWith('fd')) return true; // unique-local fc00::/7 (fc00-fdff)
+
+  // Link-local fe80::/10 spans first-hextet values fe80-febf — a 10-bit
+  // prefix doesn't land on a hex-digit boundary, so a string prefix check
+  // ("fe80") only matches the literal value fe80 and misses fe81-febf
+  // (e.g. fe90::1, febf::1). Mask the first hextet's bits instead.
+  const firstHextet = parseInt(norm.split(':')[0] || '', 16);
+  if (!Number.isNaN(firstHextet) && (firstHextet & 0xffc0) === 0xfe80) return true;
+
+  return false;
 }
 
 /**

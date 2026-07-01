@@ -56,8 +56,20 @@ describe('isBlockedIPv6', () => {
     expect(isBlockedIPv6('fd12:3456::1')).toBe(true);
   });
 
-  it('blocks link-local (fe80::/10)', () => {
+  it('blocks the full link-local range (fe80::/10 = fe80-febf), not just the literal fe80 prefix', () => {
+    // The 10-bit prefix doesn't land on a hex-digit boundary: the range spans
+    // first-hextet values fe80-febf, so fe90/fea0/febf are link-local too,
+    // even though they don't start with the literal string "fe80".
     expect(isBlockedIPv6('fe80::1')).toBe(true);
+    expect(isBlockedIPv6('fe81::1')).toBe(true);
+    expect(isBlockedIPv6('fe90::1')).toBe(true);
+    expect(isBlockedIPv6('fea0::1')).toBe(true);
+    expect(isBlockedIPv6('febf::1')).toBe(true);
+  });
+
+  it('does not block addresses just outside the fe80::/10 link-local range', () => {
+    expect(isBlockedIPv6('fec0::1')).toBe(false);
+    expect(isBlockedIPv6('fe7f::1')).toBe(false);
   });
 
   it('allows public IPv6', () => {

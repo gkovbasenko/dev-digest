@@ -5,6 +5,16 @@ Newest first. See `.claude/skills/engineering-insights/SKILL.md` for what belong
 
 ---
 
+## 2026-07-01 — Optimistic list-membership state must derive `linkedIds` from local state, not server-truth, during the pending window
+
+`SkillsTab` had `linkedIds` derived from `useAgentSkills()`'s `linkedLinks` (server truth), while `linkedSkills` (the "linked" list) was derived from `localOrder` (the optimistic local state updated immediately on toggle/drag, before the mutation resolves). Between clicking a checkbox and the mutation settling, `localOrder` is ahead of `linkedLinks` — so a just-linked skill showed up in BOTH the linked list (via `localOrder`) AND the unlinked list (via stale `linkedIds`) simultaneously, and a just-unlinked skill vanished from both. Fixed by deriving `linkedIds` from `localOrder` (`new Set(localOrder)`) so both derived lists agree on the same live source during the optimistic window.
+
+**How to apply:** whenever a component keeps an optimistic local copy of "what's linked/selected," every other derived value that needs to agree with that list (counts, filters, exclusion sets) must be computed from the SAME optimistic source — never mix one derived value off local state and another off the not-yet-settled server data for the same conceptual membership set.
+
+**Evidence:** `client/src/app/agents/[id]/_components/AgentEditor/_components/SkillsTab/SkillsTab.tsx` (`linkedIds` memo), `SkillsTab.test.tsx` ("does not show a just-linked skill in both...(the optimistic window)" test); found incidentally while adding optimistic-rollback coverage — a test asserting `getAllByRole("checkbox")` returned 3 elements instead of the expected 2 surfaced it.
+
+---
+
 ## 2026-07-01 — Mocking a TanStack Query hook with `() => ({ data: [] })` can OOM-crash the test worker
 
 `SkillsTab` has `useEffect(() => { ...; setLocalOrder(...) }, [linkedLinks])`, relying on `useAgentSkills()`'s `data` keeping a stable reference across renders — which the real TanStack Query hook does once a query settles. `AgentEditor.test.tsx` originally mocked it as `useAgentSkills: () => ({ data: [] })`: a fresh `[]` literal is a new reference every call, so the effect's dependency check never bails out — effect runs → `setLocalOrder` → re-render → hook called again → new `[]` → effect runs again, forever. This doesn't reproduce in production (React Query memoizes `data`), only in tests with a naive per-call mock; it reliably drove the Vitest worker to `FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory` and crashed the whole run — not a test failure, so it's easy to mistake for an unrelated environment/OOM flake.

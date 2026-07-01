@@ -22,11 +22,18 @@ export function SkillsTab({ agentId }: { agentId: string }) {
   // Ordered list of linked skill IDs (local state for drag optimism)
   const [localOrder, setLocalOrder] = React.useState<string[]>([]);
   const dragIndexRef = React.useRef<number | null>(null);
+  // Snapshot of localOrder before the current drag gesture / toggle, so a
+  // failed setAgentSkills mutation can revert the optimistic update instead
+  // of leaving the UI showing a linkage that was never actually persisted.
+  const preDragOrderRef = React.useRef<string[]>([]);
 
-  const linkedIds = React.useMemo(
-    () => new Set(linkedLinks?.map((l) => l.skill_id) ?? []),
-    [linkedLinks],
-  );
+  // Derived from localOrder (not linkedLinks directly) so linkedSkills and
+  // unlinkedSkills always agree on which skills are linked. During the window
+  // between an optimistic toggle/reorder and the mutation resolving,
+  // localOrder is ahead of the server-truth linkedLinks — deriving this from
+  // linkedLinks instead would make a just-linked skill appear in BOTH lists
+  // at once (and a just-unlinked skill vanish from both).
+  const linkedIds = React.useMemo(() => new Set(localOrder), [localOrder]);
 
   // Sync local order from server when linkedLinks arrives
   React.useEffect(() => {
@@ -58,6 +65,7 @@ export function SkillsTab({ agentId }: { agentId: string }) {
 
   const handleToggle = (skillId: string, checked: boolean) => {
     if (setAgentSkills.isPending) return;
+    const previousOrder = localOrder;
     let newOrder: string[];
     if (checked) {
       newOrder = [...localOrder, skillId];
@@ -65,12 +73,15 @@ export function SkillsTab({ agentId }: { agentId: string }) {
       newOrder = localOrder.filter((id) => id !== skillId);
     }
     setLocalOrder(newOrder);
-    setAgentSkills.mutate(newOrder);
+    setAgentSkills.mutate(newOrder, {
+      onError: () => setLocalOrder(previousOrder),
+    });
   };
 
   // Drag handlers for reordering linked skills
   const handleDragStart = (idx: number) => {
     dragIndexRef.current = idx;
+    preDragOrderRef.current = localOrder;
   };
 
   const handleDragOver = (e: React.DragEvent, idx: number) => {
@@ -86,8 +97,12 @@ export function SkillsTab({ agentId }: { agentId: string }) {
 
   const handleDragEnd = () => {
     dragIndexRef.current = null;
-    // Commit the new order to the server
-    setAgentSkills.mutate(localOrder);
+    const previousOrder = preDragOrderRef.current;
+    // Commit the new order to the server; revert to the pre-drag order if it
+    // fails so the list doesn't keep showing a reorder that was never saved.
+    setAgentSkills.mutate(localOrder, {
+      onError: () => setLocalOrder(previousOrder),
+    });
   };
 
   const pending = setAgentSkills.isPending;

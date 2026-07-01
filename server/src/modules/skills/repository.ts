@@ -98,10 +98,21 @@ export class SkillsRepository {
         .returning();
 
       if (bodyChanged && row) {
-        await tx
+        const inserted = await tx
           .insert(t.skillVersions)
           .values({ skillId: row.id, version: nextVersion, body: row.body })
-          .onConflictDoNothing();
+          .onConflictDoNothing()
+          .returning({ version: t.skillVersions.version });
+        if (inserted.length === 0) {
+          // Should be unreachable: the SELECT ... FOR UPDATE above serializes
+          // concurrent writers, so no two transactions should ever compute the
+          // same nextVersion for the same skill. If this ever fires, the
+          // locking above has regressed and a version snapshot is being
+          // silently dropped again — surface it loudly.
+          console.error(
+            `[skills] snapshotVersion conflict: skill ${row.id} version ${nextVersion} already existed — a version snapshot was NOT written. This should be unreachable under the SELECT ... FOR UPDATE lock in SkillsRepository.update(); investigate immediately.`,
+          );
+        }
       }
       return row;
     });

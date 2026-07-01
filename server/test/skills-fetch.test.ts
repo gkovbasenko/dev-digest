@@ -163,6 +163,24 @@ describe('fetchSkillUrl', () => {
     await expect(fetchSkillUrl('not a url')).rejects.toThrow('Invalid skill URL');
   });
 
+  it('fetches the parsed URL (parsed.href), not the raw input string — so a validated protocol always matches what is actually requested', async () => {
+    mockLookup.mockResolvedValue({ address: '93.184.216.34', family: 4 });
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      body: new ReadableStream({ start: (c) => c.close() }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await fetchSkillUrl('HTTPS://Example.com:443/skill.md');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL('HTTPS://Example.com:443/skill.md').href,
+      expect.any(Object),
+    );
+  });
+
   it('blocks when DNS resolves to a private IPv4 address', async () => {
     mockLookup.mockResolvedValue({ address: '127.0.0.1', family: 4 });
     await expect(fetchSkillUrl('https://evil.internal/skill.md')).rejects.toThrow(

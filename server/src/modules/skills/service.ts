@@ -41,6 +41,10 @@ function toSkillDto(row: SkillRow): Skill {
   };
 }
 
+// NOT the same as reviewer-core's `<untrusted>` wrapper — this format is
+// invisible to assemblePrompt's INJECTION_GUARD. It only gates the "needs
+// vetting" UI badge. Never feed this wrapped body into an agent prompt
+// as-is; see the warning on UNTRUSTED_SKILL_START/END in constants.ts.
 function wrapUntrusted(body: string): string {
   return `${UNTRUSTED_SKILL_START}\n${body}\n${UNTRUSTED_SKILL_END}`;
 }

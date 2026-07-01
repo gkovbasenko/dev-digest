@@ -2,14 +2,16 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import type { Skill, AgentSkillLink } from "@devdigest/shared";
 
-const { mockMutate, mockIsPending } = vi.hoisted(() => ({
+const { mockMutate, mockIsPending, mockSkills, mockLinks } = vi.hoisted(() => ({
   mockMutate: vi.fn(),
   mockIsPending: { current: false },
+  mockSkills: { current: [] as Skill[] },
+  mockLinks: { current: [] as AgentSkillLink[] },
 }));
 
 vi.mock("../../../../../../../lib/hooks/skills", () => ({
-  useSkills: () => ({ data: SKILLS }),
-  useAgentSkills: () => ({ data: LINKS }),
+  useSkills: () => ({ data: mockSkills.current }),
+  useAgentSkills: () => ({ data: mockLinks.current }),
   useSetAgentSkills: () => ({ mutate: mockMutate, isPending: mockIsPending.current }),
 }));
 
@@ -43,6 +45,9 @@ const SKILLS: Skill[] = [
 ];
 
 const LINKS: AgentSkillLink[] = [{ agent_id: "ag1", skill_id: "sk-a", order: 0 }];
+
+mockSkills.current = SKILLS;
+mockLinks.current = LINKS;
 
 /**
  * Regression coverage for the optimistic-rollback fix: SkillsTab updates
@@ -110,5 +115,86 @@ describe("SkillsTab — optimistic rollback on mutation failure", () => {
 
     expect(mockMutate).not.toHaveBeenCalled();
     mockIsPending.current = false;
+  });
+});
+
+/**
+ * Move-up/move-down buttons: keyboard/screen-reader-accessible alternative
+ * to drag-and-drop reordering (native HTML5 drag has no keyboard path).
+ */
+describe("SkillsTab — move-up/move-down buttons", () => {
+  const THREE_SKILLS: Skill[] = [
+    { ...SKILLS[0]!, id: "sk-a", name: "Skill A" },
+    { ...SKILLS[0]!, id: "sk-b", name: "Skill B" },
+    { ...SKILLS[0]!, id: "sk-c", name: "Skill C" },
+  ];
+  const THREE_LINKS: AgentSkillLink[] = [
+    { agent_id: "ag1", skill_id: "sk-a", order: 0 },
+    { agent_id: "ag1", skill_id: "sk-b", order: 1 },
+    { agent_id: "ag1", skill_id: "sk-c", order: 2 },
+  ];
+
+  afterEach(() => {
+    mockSkills.current = SKILLS;
+    mockLinks.current = LINKS;
+  });
+
+  it("moves the middle item up, committing the swapped order", () => {
+    mockSkills.current = THREE_SKILLS;
+    mockLinks.current = THREE_LINKS;
+    mockMutate.mockReset();
+    mockMutate.mockImplementation(() => {});
+
+    render(<SkillsTab agentId="ag1" />);
+    fireEvent.click(screen.getByRole("button", { name: "Move Skill B up" }));
+
+    expect(mockMutate).toHaveBeenCalledWith(["sk-b", "sk-a", "sk-c"], expect.any(Object));
+  });
+
+  it("moves the middle item down, committing the swapped order", () => {
+    mockSkills.current = THREE_SKILLS;
+    mockLinks.current = THREE_LINKS;
+    mockMutate.mockReset();
+    mockMutate.mockImplementation(() => {});
+
+    render(<SkillsTab agentId="ag1" />);
+    fireEvent.click(screen.getByRole("button", { name: "Move Skill B down" }));
+
+    expect(mockMutate).toHaveBeenCalledWith(["sk-a", "sk-c", "sk-b"], expect.any(Object));
+  });
+
+  it("disables the up button for the first item and the down button for the last item", () => {
+    mockSkills.current = THREE_SKILLS;
+    mockLinks.current = THREE_LINKS;
+    mockMutate.mockReset();
+
+    render(<SkillsTab agentId="ag1" />);
+
+    expect(screen.getByRole("button", { name: "Move Skill A up" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Move Skill C down" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Move Skill A down" })).not.toBeDisabled();
+    expect(screen.getByRole("button", { name: "Move Skill C up" })).not.toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Move Skill A up" }));
+    fireEvent.click(screen.getByRole("button", { name: "Move Skill C down" }));
+    expect(mockMutate).not.toHaveBeenCalled();
+  });
+
+  it("rolls back the optimistic order if the move mutation fails", async () => {
+    mockSkills.current = THREE_SKILLS;
+    mockLinks.current = THREE_LINKS;
+    mockMutate.mockReset();
+    mockMutate.mockImplementation((_order: string[], opts?: { onError?: () => void }) => {
+      opts?.onError?.();
+    });
+
+    render(<SkillsTab agentId="ag1" />);
+    fireEvent.click(screen.getByRole("button", { name: "Move Skill B up" }));
+
+    // After rollback, Skill B's "up" button (now back in the middle slot)
+    // should be enabled again, matching the reverted (pre-move) order.
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Move Skill A up" })).toBeDisabled();
+    });
   });
 });

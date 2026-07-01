@@ -84,6 +84,13 @@ export class SkillsRepository {
       const bodyChanged = patch.body !== undefined && patch.body !== existing.body;
       const nextVersion = bodyChanged ? existing.version + 1 : existing.version;
 
+      // Optimistic-lock guard (eq(version, existing.version)) as a second line
+      // of defense alongside the FOR UPDATE lock above: under correct code this
+      // can never fail to match (the lock guarantees no other writer could have
+      // changed the row's version since we read `existing` moments ago in this
+      // same transaction). If a future refactor ever calls update() outside a
+      // transaction, or the lock is otherwise bypassed, this WHERE clause turns
+      // a silent lost-update into a detectable zero-row UPDATE instead.
       const [row] = await tx
         .update(t.skills)
         .set({
@@ -94,10 +101,24 @@ export class SkillsRepository {
           ...(patch.enabled !== undefined ? { enabled: patch.enabled } : {}),
           ...(bodyChanged ? { version: nextVersion } : {}),
         })
-        .where(and(eq(t.skills.workspaceId, workspaceId), eq(t.skills.id, id)))
+        .where(
+          and(
+            eq(t.skills.workspaceId, workspaceId),
+            eq(t.skills.id, id),
+            eq(t.skills.version, existing.version),
+          ),
+        )
         .returning();
 
-      if (bodyChanged && row) {
+      if (!row) {
+        // Should be unreachable under the FOR UPDATE lock above — see comment.
+        console.error(
+          `[skills] optimistic-lock mismatch: skill ${id} was expected to still be at version ${existing.version} but the UPDATE matched zero rows. This should be unreachable under the SELECT ... FOR UPDATE lock in SkillsRepository.update(); investigate immediately.`,
+        );
+        return undefined;
+      }
+
+      if (bodyChanged) {
         const inserted = await tx
           .insert(t.skillVersions)
           .values({ skillId: row.id, version: nextVersion, body: row.body })

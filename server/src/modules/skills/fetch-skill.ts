@@ -97,7 +97,10 @@ export async function fetchSkillUrl(rawUrl: string): Promise<string> {
   try {
     let res: Response;
     try {
-      res = await fetch(rawUrl, {
+      // Fetch the parsed/validated URL, not rawUrl — guarantees fetch() connects
+      // to exactly what new URL() parsed and the protocol check above ran
+      // against, rather than relying on two separate URL parses staying in sync.
+      res = await fetch(parsed.href, {
         signal: AbortSignal.timeout(10_000),
         redirect: 'error',
         dispatcher: pinnedDispatcher,

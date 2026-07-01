@@ -12,6 +12,22 @@ const TYPE_COLORS: Record<SkillType, { color: string; bg: string }> = {
   custom: { color: "var(--text-muted)", bg: "var(--bg-hover)" },
 };
 
+function moveButtonStyle(disabled: boolean): React.CSSProperties {
+  return {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: 18,
+    height: 14,
+    padding: 0,
+    border: "none",
+    borderRadius: 3,
+    background: "transparent",
+    color: disabled ? "var(--border-strong)" : "var(--text-muted)",
+    cursor: disabled ? "default" : "pointer",
+  };
+}
+
 export function SkillsTab({ agentId }: { agentId: string }) {
   const { data: allSkills } = useSkills();
   const { data: linkedLinks } = useAgentSkills(agentId);
@@ -115,6 +131,26 @@ export function SkillsTab({ agentId }: { agentId: string }) {
     });
   };
 
+  // Keyboard/screen-reader-accessible alternative to drag-and-drop reordering
+  // (native HTML5 drag has no built-in keyboard path). realIdx is the
+  // skill's position in the full (unfiltered) localOrder, matching how the
+  // drag handlers above already index — so this stays correct even while a
+  // search filter is narrowing which rows are rendered.
+  const moveLinked = (realIdx: number, direction: -1 | 1) => {
+    if (setAgentSkills.isPending) return;
+    const targetIdx = realIdx + direction;
+    if (targetIdx < 0 || targetIdx >= localOrder.length) return;
+    const previousOrder = localOrder;
+    const newOrder = [...localOrder];
+    const tmp = newOrder[realIdx]!;
+    newOrder[realIdx] = newOrder[targetIdx]!;
+    newOrder[targetIdx] = tmp;
+    setLocalOrder(newOrder);
+    setAgentSkills.mutate(newOrder, {
+      onError: () => setLocalOrder(previousOrder),
+    });
+  };
+
   const pending = setAgentSkills.isPending;
   const total = allSkills?.length ?? 0;
   const linked = linkedIds.size;
@@ -182,6 +218,27 @@ export function SkillsTab({ agentId }: { agentId: string }) {
                 {skill.name}
               </span>
               <Badge color={tc.color} bg={tc.bg}>{skill.type}</Badge>
+              {/* Keyboard/screen-reader-accessible alternative to drag reordering */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                <button
+                  type="button"
+                  aria-label={`Move ${skill.name} up`}
+                  onClick={() => moveLinked(realIdx, -1)}
+                  disabled={pending || realIdx === 0}
+                  style={moveButtonStyle(pending || realIdx === 0)}
+                >
+                  <Icon.ArrowUp size={12} />
+                </button>
+                <button
+                  type="button"
+                  aria-label={`Move ${skill.name} down`}
+                  onClick={() => moveLinked(realIdx, 1)}
+                  disabled={pending || realIdx === localOrder.length - 1}
+                  style={moveButtonStyle(pending || realIdx === localOrder.length - 1)}
+                >
+                  <Icon.ArrowDown size={12} />
+                </button>
+              </div>
             </div>
           );
         })}
@@ -226,7 +283,7 @@ export function SkillsTab({ agentId }: { agentId: string }) {
       {/* Footer hint */}
       {linked > 0 && (
         <div style={{ padding: "10px 24px", borderTop: "1px solid var(--border)", fontSize: 12, color: "var(--text-muted)" }}>
-          Order matters — earlier skills appear earlier in the assembled prompt. Drag to reorder.
+          Order matters — earlier skills appear earlier in the assembled prompt. Drag to reorder, or use the arrow buttons.
         </div>
       )}
     </div>

@@ -2,8 +2,33 @@ import { describe, it, expect } from 'vitest';
 import { sep, join } from 'node:path';
 import { mkdtemp, mkdir, writeFile, symlink, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { verifyEvidence, resolveClonePath, isWithinRoot } from '../src/modules/conventions/helpers.js';
+import {
+  verifyEvidence,
+  resolveClonePath,
+  isWithinRoot,
+  buildSkillBody,
+  buildConventionsPrompt,
+} from '../src/modules/conventions/helpers.js';
 import { resolveRealClonePath } from '../src/modules/conventions/service.js';
+import type { ConventionRow } from '../src/db/rows.js';
+
+function mkRow(overrides: Partial<ConventionRow>): ConventionRow {
+  return {
+    id: 'c1',
+    workspaceId: 'ws1',
+    repoId: 'repo1',
+    rule: 'a rule',
+    category: null,
+    evidencePath: null,
+    evidenceSnippet: null,
+    evidenceLine: null,
+    confidence: null,
+    acceptedAt: null,
+    rejectedAt: null,
+    createdAt: new Date('2026-01-01T00:00:00Z'),
+    ...overrides,
+  };
+}
 
 /**
  * Unit coverage for verifyEvidence — the code-level check that drops any
@@ -312,5 +337,87 @@ describe('resolveRealClonePath', () => {
     } finally {
       await rm(clonePath, { recursive: true, force: true });
     }
+  });
+});
+
+describe('buildSkillBody', () => {
+  it('groups rows by category into separate sections', () => {
+    const body = buildSkillBody([
+      mkRow({ rule: 'Use async/await', category: 'error-handling' }),
+      mkRow({ rule: 'Name services with a Service suffix', category: 'naming' }),
+    ]);
+    expect(body).toContain('## error-handling');
+    expect(body).toContain('## naming');
+    expect(body.indexOf('Use async/await')).toBeGreaterThan(body.indexOf('## error-handling'));
+    expect(body.indexOf('Name services with a Service suffix')).toBeGreaterThan(
+      body.indexOf('## naming'),
+    );
+  });
+
+  it('keeps multiple rows of the same category under one section', () => {
+    const body = buildSkillBody([
+      mkRow({ rule: 'Rule A', category: 'naming' }),
+      mkRow({ rule: 'Rule B', category: 'naming' }),
+    ]);
+    expect(body.match(/## naming/g)).toHaveLength(1);
+    expect(body).toContain('- Rule A');
+    expect(body).toContain('- Rule B');
+  });
+
+  it('falls back to an "other" section for a null category', () => {
+    const body = buildSkillBody([mkRow({ rule: 'Uncategorized rule', category: null })]);
+    expect(body).toContain('## other');
+    expect(body).toContain('- Uncategorized rule');
+  });
+
+  it('appends evidence_path and :evidence_line when both are present', () => {
+    const body = buildSkillBody([
+      mkRow({ rule: 'Rule with evidence', evidencePath: 'src/foo.ts', evidenceLine: 42 }),
+    ]);
+    expect(body).toContain('- Rule with evidence (src/foo.ts:42)');
+  });
+
+  it('appends evidence_path without a line suffix when evidence_line is null', () => {
+    const body = buildSkillBody([mkRow({ rule: 'Rule with path only', evidencePath: 'src/foo.ts' })]);
+    expect(body).toContain('- Rule with path only (src/foo.ts)');
+  });
+
+  it('omits the evidence suffix entirely when evidence_path is null', () => {
+    const body = buildSkillBody([mkRow({ rule: 'Rule with no evidence' })]);
+    expect(body).toContain('- Rule with no evidence');
+    expect(body).not.toMatch(/Rule with no evidence \(/);
+  });
+
+  it('produces just the heading for an empty array', () => {
+    expect(buildSkillBody([])).toBe('# repo-conventions\n\n');
+  });
+});
+
+describe('buildConventionsPrompt', () => {
+  it('puts config files before source files, in that order', () => {
+    const messages = buildConventionsPrompt(
+      [{ path: 'src/foo.ts', content: 'export const foo = 1;' }],
+      [{ path: 'tsconfig.json', content: '{"compilerOptions":{}}' }],
+    );
+    const user = messages[1]!.content;
+    expect(user.indexOf('tsconfig.json')).toBeLessThan(user.indexOf('src/foo.ts'));
+  });
+
+  it('wraps every file section with wrapUntrusted (delimited by the file path as the source label)', () => {
+    const messages = buildConventionsPrompt(
+      [{ path: 'src/foo.ts', content: 'export const foo = 1;' }],
+      [],
+    );
+    const user = messages[1]!.content;
+    expect(user).toContain('<untrusted source="src/foo.ts">');
+    expect(user).toContain('export const foo = 1;');
+    expect(user).toContain('</untrusted>');
+  });
+
+  it('includes a system message instructing the model to cite concrete evidence', () => {
+    const messages = buildConventionsPrompt([], []);
+    expect(messages[0]!.role).toBe('system');
+    expect(messages[0]!.content).toMatch(/evidence/i);
+    expect(messages[1]!.role).toBe('user');
   });
 });

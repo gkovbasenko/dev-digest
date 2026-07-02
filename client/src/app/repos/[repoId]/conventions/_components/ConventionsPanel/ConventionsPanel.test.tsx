@@ -14,7 +14,7 @@ const {
   mockActionPending,
   mockRefetch,
 } = vi.hoisted(() => ({
-  mockConventions: { current: [] as ConventionCandidate[] },
+  mockConventions: { current: [] as ConventionCandidate[] | undefined },
   mockIsLoading: { current: false },
   mockIsError: { current: false },
   mockError: { current: null as Error | null },
@@ -75,6 +75,17 @@ describe("ConventionsPanel", () => {
   it("shows an empty state when there are no candidates", () => {
     render(<ConventionsPanel repoId="repo1" />);
     expect(screen.getByText("No conventions extracted yet")).toBeInTheDocument();
+  });
+
+  it("shows an empty state (not a crash) when conventions is undefined, not just an empty array", () => {
+    mockConventions.current = undefined;
+    render(<ConventionsPanel repoId="repo1" />);
+    expect(screen.getByText("No conventions extracted yet")).toBeInTheDocument();
+    // the counter renders "" (not "0 of 0") while conventions is undefined —
+    // it's gated on `conventions ?` truthiness, not `conventions ?? []`.
+    // (a loose /accepted$/ would also match the "Create skill from accepted"
+    // button, which is unrelated and always present.)
+    expect(screen.queryByText(/^\d+ of \d+ accepted$/)).not.toBeInTheDocument();
   });
 
   it("renders each convention candidate when present", () => {

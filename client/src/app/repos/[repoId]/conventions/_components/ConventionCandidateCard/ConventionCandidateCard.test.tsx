@@ -81,4 +81,48 @@ describe("ConventionCandidateCard", () => {
     fireEvent.change(input, { target: { value: "   " } });
     expect(screen.getByText("Save").closest("button")).toBeDisabled();
   });
+
+  describe("nullable fields", () => {
+    it("renders without a category badge when category is null", () => {
+      render(<ConventionCandidateCard c={{ ...CANDIDATE, category: null }} onAction={() => {}} />);
+      expect(screen.getByText(CANDIDATE.rule)).toBeInTheDocument();
+      expect(screen.queryByText("naming")).not.toBeInTheDocument();
+    });
+
+    it("renders without an evidence path link when evidence_path is null", () => {
+      render(
+        <ConventionCandidateCard c={{ ...CANDIDATE, evidence_path: null }} onAction={() => {}} />,
+      );
+      expect(screen.queryByText("src/modules/foo/service.ts")).not.toBeInTheDocument();
+    });
+
+    it("renders without a snippet block when evidence_snippet is null", () => {
+      const { container } = render(
+        <ConventionCandidateCard c={{ ...CANDIDATE, evidence_snippet: null }} onAction={() => {}} />,
+      );
+      expect(container.querySelector("pre")).not.toBeInTheDocument();
+    });
+
+    it("renders without a confidence indicator when confidence is null", () => {
+      render(<ConventionCandidateCard c={{ ...CANDIDATE, confidence: null }} onAction={() => {}} />);
+      expect(screen.queryByTitle("Model confidence")).not.toBeInTheDocument();
+    });
+
+    it("renders without crashing when every nullable field is null", () => {
+      render(
+        <ConventionCandidateCard
+          c={{
+            ...CANDIDATE,
+            category: null,
+            evidence_path: null,
+            evidence_snippet: null,
+            confidence: null,
+          }}
+          onAction={() => {}}
+        />,
+      );
+      expect(screen.getByText(CANDIDATE.rule)).toBeInTheDocument();
+      expect(screen.getByText("Accept")).toBeInTheDocument();
+    });
+  });
 });

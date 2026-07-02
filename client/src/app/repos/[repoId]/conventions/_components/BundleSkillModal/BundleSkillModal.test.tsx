@@ -173,4 +173,21 @@ describe("BundleSkillModal", () => {
     render(<BundleSkillModal repoId="repo1" onClose={() => {}} />);
     expect(screen.getByRole("button", { name: "Create skill" })).toBeDisabled();
   });
+
+  it("shows 'Saving…' and disables the button while the create mutation is in flight", () => {
+    bundleImmediately();
+    mockCreatePending.current = true;
+    render(<BundleSkillModal repoId="repo1" onClose={() => {}} />);
+    const btn = screen.getByRole("button", { name: "Saving…" });
+    expect(btn).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Create skill" })).not.toBeInTheDocument();
+  });
+
+  it("shows 'Saving…' and disables the button while the agent-link mutation is in flight", () => {
+    bundleImmediately();
+    mockSetAgentSkillsPending.current = true;
+    render(<BundleSkillModal repoId="repo1" onClose={() => {}} />);
+    const btn = screen.getByRole("button", { name: "Saving…" });
+    expect(btn).toBeDisabled();
+  });
 });

@@ -2,15 +2,23 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import type { ConventionCandidate } from "@devdigest/shared";
 
-const { mockConventions, mockIsLoading, mockIsError, mockExtractMutate, mockExtractPending, mockActionMutate } =
-  vi.hoisted(() => ({
-    mockConventions: { current: [] as ConventionCandidate[] },
-    mockIsLoading: { current: false },
-    mockIsError: { current: false },
-    mockExtractMutate: vi.fn(),
-    mockExtractPending: { current: false },
-    mockActionMutate: vi.fn(),
-  }));
+const {
+  mockConventions,
+  mockIsLoading,
+  mockIsError,
+  mockExtractMutate,
+  mockExtractPending,
+  mockActionMutate,
+  mockRefetch,
+} = vi.hoisted(() => ({
+  mockConventions: { current: [] as ConventionCandidate[] },
+  mockIsLoading: { current: false },
+  mockIsError: { current: false },
+  mockExtractMutate: vi.fn(),
+  mockExtractPending: { current: false },
+  mockActionMutate: vi.fn(),
+  mockRefetch: vi.fn(),
+}));
 
 vi.mock("@/lib/hooks/conventions", () => ({
   useConventions: () => ({
@@ -18,7 +26,7 @@ vi.mock("@/lib/hooks/conventions", () => ({
     isLoading: mockIsLoading.current,
     isError: mockIsError.current,
     error: null,
-    refetch: vi.fn(),
+    refetch: mockRefetch,
   }),
   useExtractConventions: () => ({ mutate: mockExtractMutate, isPending: mockExtractPending.current }),
   useConventionAction: () => ({ mutate: mockActionMutate, isPending: false }),
@@ -42,6 +50,7 @@ afterEach(() => {
   mockExtractPending.current = false;
   mockExtractMutate.mockReset();
   mockActionMutate.mockReset();
+  mockRefetch.mockReset();
 });
 
 const CANDIDATE: ConventionCandidate = {
@@ -72,6 +81,14 @@ describe("ConventionsPanel", () => {
     render(<ConventionsPanel repoId="repo1" />);
     fireEvent.click(screen.getByText("Extract conventions"));
     expect(mockExtractMutate).toHaveBeenCalled();
+  });
+
+  it("shows 'Extracting…' and disables the button while extraction is pending", () => {
+    mockExtractPending.current = true;
+    render(<ConventionsPanel repoId="repo1" />);
+    const btn = screen.getByText("Extracting…").closest("button")!;
+    expect(btn).toBeDisabled();
+    expect(screen.queryByText("Extract conventions")).not.toBeInTheDocument();
   });
 
   it("disables 'Create skill from accepted' when nothing is accepted yet", () => {
@@ -111,5 +128,12 @@ describe("ConventionsPanel", () => {
     mockIsError.current = true;
     render(<ConventionsPanel repoId="repo1" />);
     expect(screen.getByText("Could not load conventions")).toBeInTheDocument();
+  });
+
+  it("calls refetch when the error state's Retry button is clicked", () => {
+    mockIsError.current = true;
+    render(<ConventionsPanel repoId="repo1" />);
+    fireEvent.click(screen.getByText("Retry"));
+    expect(mockRefetch).toHaveBeenCalledOnce();
   });
 });

@@ -54,6 +54,19 @@ const MISSING_FILE_CANDIDATE = {
   confidence: 0.5,
 };
 
+// A real file OUTSIDE the clone directory with content that would satisfy
+// verifyEvidence if the path traversal were followed — proves the
+// containment check runs before the read, not just that missing files 404.
+const SECRET_OUTSIDE_CONTENT = 'SECRET_TOKEN_12345\n';
+const TRAVERSAL_CANDIDATE = {
+  rule: 'A rule citing evidence outside the clone directory (path traversal)',
+  category: 'naming',
+  evidence_path: '../secret-outside.txt',
+  evidence_line: 1,
+  evidence_snippet: 'SECRET_TOKEN_12345',
+  confidence: 0.9,
+};
+
 d('Conventions extraction lifecycle (POST extract / GET / PATCH / POST bundle)', () => {
   let pg: PgFixture;
   let workspaceId: string;
@@ -67,7 +80,7 @@ d('Conventions extraction lifecycle (POST extract / GET / PATCH / POST bundle)',
     await pg?.stop();
   });
 
-  async function makeRepoWithSamples(): Promise<{ repoId: string }> {
+  async function makeRepoWithSamples(): Promise<{ repoId: string; clonePath: string }> {
     const clonePath = await mkdtemp(join(tmpdir(), 'dd-conventions-'));
     await mkdir(join(clonePath, 'src/modules/foo'), { recursive: true });
     await writeFile(join(clonePath, SAMPLE_PATH), SAMPLE_CONTENT, 'utf8');
@@ -94,7 +107,7 @@ d('Conventions extraction lifecycle (POST extract / GET / PATCH / POST bundle)',
       percentile: 99,
     });
 
-    return { repoId };
+    return { repoId, clonePath };
   }
 
   function makeApp(candidates: unknown[]) {
@@ -125,6 +138,28 @@ d('Conventions extraction lifecycle (POST extract / GET / PATCH / POST bundle)',
     expect(created[0].evidence_path).toBe(SAMPLE_PATH);
     expect(created[0].accepted).toBe(false);
     expect(created[0].rejected).toBe(false);
+
+    await app.close();
+  });
+
+  it('drops a candidate whose evidence_path attempts to traverse outside the clone directory', async () => {
+    const { repoId, clonePath } = await makeRepoWithSamples();
+    // Plant a real file one level above the clone with content that would
+    // satisfy verifyEvidence if the traversal path were actually followed —
+    // proves the containment check runs before the read, not that the path
+    // just happens not to exist.
+    await writeFile(join(clonePath, '..', 'secret-outside.txt'), SECRET_OUTSIDE_CONTENT, 'utf8');
+
+    const app = await makeApp([TRAVERSAL_CANDIDATE]);
+    const res = await app.inject({
+      method: 'POST',
+      url: `/repos/${repoId}/conventions/extract`,
+    });
+    expect(res.statusCode).toBe(201);
+    expect(res.json()).toHaveLength(0);
+
+    const list = await app.inject({ method: 'GET', url: `/repos/${repoId}/conventions` });
+    expect(list.json()).toHaveLength(0);
 
     await app.close();
   });

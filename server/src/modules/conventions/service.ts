@@ -1,5 +1,4 @@
 import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
 import { z } from 'zod';
 import type { Container } from '../../platform/container.js';
 import type { ConventionCandidate, SkillType } from '@devdigest/shared';
@@ -7,7 +6,13 @@ import { ConventionCategory } from '@devdigest/shared';
 import { ValidationError } from '../../platform/errors.js';
 import { resolveFeatureModel } from '../settings/feature-models.js';
 import { ConventionsRepository, type InsertConvention } from './repository.js';
-import { buildConventionsPrompt, buildSkillBody, toConventionDto, verifyEvidence } from './helpers.js';
+import {
+  buildConventionsPrompt,
+  buildSkillBody,
+  resolveClonePath,
+  toConventionDto,
+  verifyEvidence,
+} from './helpers.js';
 import { CONFIG_FILE_CANDIDATES, SOURCE_SAMPLE_COUNT } from './constants.js';
 
 const RawCandidate = z.object({
@@ -36,7 +41,9 @@ export interface SkillBundle {
 }
 
 async function readCloneFile(clonePath: string, file: string): Promise<string | null> {
-  return readFile(join(clonePath, file), 'utf8').catch(() => null);
+  const resolved = resolveClonePath(clonePath, file);
+  if (!resolved) return null;
+  return readFile(resolved, 'utf8').catch(() => null);
 }
 
 export class ConventionsService {

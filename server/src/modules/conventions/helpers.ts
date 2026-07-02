@@ -1,3 +1,4 @@
+import { resolve, sep } from 'node:path';
 import { wrapUntrusted } from '@devdigest/reviewer-core';
 import type { ChatMessage, ConventionCandidate, ConventionCategory } from '@devdigest/shared';
 import type { ConventionRow } from '../../db/rows.js';
@@ -14,6 +15,21 @@ export function toConventionDto(row: ConventionRow): ConventionCandidate {
     accepted: !!row.acceptedAt,
     rejected: !!row.rejectedAt,
   };
+}
+
+/**
+ * Resolve `file` against `clonePath` and return the resolved absolute path,
+ * or null if it would escape the clone directory (path traversal via `../`,
+ * or an absolute path that overrides the base entirely). `evidence_path`
+ * comes straight from the LLM's structured output — untrusted, since a
+ * malicious repo could try to prompt-inject a traversal path into it — so
+ * this containment check runs before any filesystem read ever touches it.
+ */
+export function resolveClonePath(clonePath: string, file: string): string | null {
+  const root = resolve(clonePath);
+  const resolved = resolve(root, file);
+  if (resolved !== root && !resolved.startsWith(root + sep)) return null;
+  return resolved;
 }
 
 export interface EvidenceCheck {

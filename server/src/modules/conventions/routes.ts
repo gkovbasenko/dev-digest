@@ -41,7 +41,9 @@ export default async function conventionsRoutes(appBase: FastifyInstance) {
 
   app.post(
     '/repos/:id/conventions/extract',
-    { schema: { params: IdParams } },
+    // Same per-route cap as /pulls/:id/review — both trigger a paid LLM call
+    // per request, tighter than the app-wide default (see app.ts).
+    { schema: { params: IdParams }, config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
     async (req, reply) => {
       const { workspaceId } = await getContext(app.container, req);
       const candidates = await service.extract(workspaceId, req.params.id);

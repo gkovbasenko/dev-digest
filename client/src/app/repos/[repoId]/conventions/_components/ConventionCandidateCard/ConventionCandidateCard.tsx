@@ -59,13 +59,11 @@ export function ConventionCandidateCard({
       </div>
 
       <div style={s.metaRow}>
-        {c.evidence_path && (
-          <MonoLink href={href}>
-            {c.evidence_path}
-          </MonoLink>
-        )}
+        {c.evidence_path && <MonoLink href={href}>{c.evidence_path}</MonoLink>}
         {c.confidence != null && <ConfidenceNum value={c.confidence} />}
       </div>
+
+      {c.evidence_snippet && <pre style={s.snippet}>{c.evidence_snippet}</pre>}
 
       {editing && (
         <div style={s.editStack}>

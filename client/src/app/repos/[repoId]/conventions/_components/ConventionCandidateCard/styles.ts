@@ -34,6 +34,18 @@ export const s = {
     gap: 12,
     marginTop: 6,
   } satisfies CSSProperties,
+  snippet: {
+    marginTop: 8,
+    padding: "10px 12px",
+    borderRadius: 6,
+    border: "1px solid var(--border)",
+    background: "var(--bg-surface)",
+    fontSize: 12.5,
+    lineHeight: 1.6,
+    color: "var(--text-secondary)",
+    overflowX: "auto",
+    whiteSpace: "pre",
+  } satisfies CSSProperties,
   actions: {
     display: "flex",
     gap: 8,

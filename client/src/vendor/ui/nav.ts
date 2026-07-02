@@ -23,7 +23,6 @@ export const NAV: NavGroup[] = [
     section: "WORKSPACE",
     items: [
       { key: "pulls", label: "Pull Requests", icon: "GitPullRequest", href: "/repos/:repoId/pulls", gKey: "p" },
-      { key: "conventions", label: "Conventions", icon: "Sparkles", href: "/repos/:repoId/conventions", gKey: "c" },
     ],
   },
   {
@@ -31,6 +30,7 @@ export const NAV: NavGroup[] = [
     items: [
       { key: "skills", label: "Skills", icon: "BookOpen", href: "/skills", gKey: "s" },
       { key: "agents", label: "Agents", icon: "Cpu", href: "/agents", gKey: "a" },
+      { key: "conventions", label: "Conventions", icon: "Sparkles", href: "/repos/:repoId/conventions", gKey: "c" },
     ],
   },
 ];

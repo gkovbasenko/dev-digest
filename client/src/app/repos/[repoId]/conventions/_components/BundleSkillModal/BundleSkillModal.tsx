@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Modal, FormField, TextInput, SelectInput, Textarea, Button, Skeleton } from "@devdigest/ui";
+import { Modal, FormField, TextInput, SelectInput, Textarea, Button, Skeleton, Icon } from "@devdigest/ui";
 import { useAgents } from "@/lib/hooks/agents";
 import { useAgentSkills, useSetAgentSkills } from "@/lib/hooks/skills";
 import { useCreateSkill } from "@/lib/hooks/skills";
@@ -10,9 +10,13 @@ import { useToast } from "@/lib/toast";
 
 export function BundleSkillModal({
   repoId,
+  repoFullName,
+  acceptedCount,
   onClose,
 }: {
   repoId: string;
+  repoFullName?: string | null;
+  acceptedCount?: number;
   onClose: () => void;
 }) {
   const bundle = useBundleConventions(repoId);
@@ -68,10 +72,17 @@ export function BundleSkillModal({
   const pending = create.isPending || setAgentSkills.isPending;
   const loadingBundle = bundle.isPending && !bundle.data;
 
+  const mergedFrom =
+    acceptedCount != null
+      ? `Merged from ${acceptedCount} accepted convention${acceptedCount === 1 ? "" : "s"}${
+          repoFullName ? ` in ${repoFullName}` : ""
+        }. Everything below is editable before you save.`
+      : null;
+
   return (
     <Modal
-      title="Create skill from accepted conventions"
-      subtitle="Review and edit the skill before saving. Optionally link it to an agent."
+      title="Create skill from conventions"
+      subtitle={name || undefined}
       onClose={onClose}
       width={640}
       footer={
@@ -89,6 +100,24 @@ export function BundleSkillModal({
           <Skeleton height={200} />
         ) : (
           <>
+            {mergedFrom && (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: 8,
+                  padding: "10px 12px",
+                  borderRadius: 7,
+                  background: "var(--info-bg)",
+                  color: "var(--info)",
+                  fontSize: 13,
+                  lineHeight: 1.5,
+                }}
+              >
+                <Icon.Info size={15} style={{ flexShrink: 0, marginTop: 1 }} />
+                <span>{mergedFrom}</span>
+              </div>
+            )}
             <FormField label="Name" required>
               <TextInput value={name} onChange={setName} placeholder="repo-conventions" />
             </FormField>

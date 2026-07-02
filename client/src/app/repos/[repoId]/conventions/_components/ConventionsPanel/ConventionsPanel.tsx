@@ -33,7 +33,7 @@ export function ConventionsPanel({
       <div style={s.toolbar}>
         <div style={s.toolbarLeft}>
           <span style={s.count}>
-            {conventions ? `${conventions.length} candidate(s), ${acceptedCount} accepted` : ""}
+            {conventions ? `${acceptedCount} of ${conventions.length} accepted` : ""}
           </span>
         </div>
         <div style={s.toolbarLeft}>
@@ -90,7 +90,14 @@ export function ConventionsPanel({
         </div>
       )}
 
-      {showBundle && <BundleSkillModal repoId={repoId} onClose={() => setShowBundle(false)} />}
+      {showBundle && (
+        <BundleSkillModal
+          repoId={repoId}
+          repoFullName={repoFullName}
+          acceptedCount={acceptedCount}
+          onClose={() => setShowBundle(false)}
+        />
+      )}
     </div>
   );
 }

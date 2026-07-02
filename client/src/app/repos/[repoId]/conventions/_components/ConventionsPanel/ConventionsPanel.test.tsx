@@ -65,7 +65,7 @@ describe("ConventionsPanel", () => {
     mockConventions.current = [CANDIDATE];
     render(<ConventionsPanel repoId="repo1" />);
     expect(screen.getByText(CANDIDATE.rule)).toBeInTheDocument();
-    expect(screen.getByText("1 candidate(s), 0 accepted")).toBeInTheDocument();
+    expect(screen.getByText("0 of 1 accepted")).toBeInTheDocument();
   });
 
   it("fires the extract mutation when 'Extract conventions' is clicked", () => {

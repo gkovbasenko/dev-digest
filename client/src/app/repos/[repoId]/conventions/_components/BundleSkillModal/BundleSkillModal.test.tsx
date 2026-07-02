@@ -93,6 +93,29 @@ describe("BundleSkillModal", () => {
     expect(container.querySelector("textarea")?.value).toBe(BUNDLE_RESULT.body);
   });
 
+  it("shows a 'merged from N accepted conventions' banner when acceptedCount/repoFullName are given", () => {
+    bundleImmediately();
+    render(
+      <BundleSkillModal
+        repoId="repo1"
+        repoFullName="acme/payments-api"
+        acceptedCount={3}
+        onClose={() => {}}
+      />,
+    );
+    expect(
+      screen.getByText(
+        "Merged from 3 accepted conventions in acme/payments-api. Everything below is editable before you save.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("omits the banner when acceptedCount is not provided", () => {
+    bundleImmediately();
+    render(<BundleSkillModal repoId="repo1" onClose={() => {}} />);
+    expect(screen.queryByText(/Merged from/)).not.toBeInTheDocument();
+  });
+
   it("creates the skill without linking when no agent is selected", () => {
     bundleImmediately();
     mockCreateMutate.mockImplementation(

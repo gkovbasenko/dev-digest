@@ -141,13 +141,26 @@ export const CommunitySkill = z.object({
 export type CommunitySkill = z.infer<typeof CommunitySkill>;
 
 // ---- Conventions ----
+export const ConventionCategory = z.enum([
+  'naming',
+  'imports',
+  'error-handling',
+  'testing',
+  'formatting',
+  'architecture',
+  'other',
+]);
+export type ConventionCategory = z.infer<typeof ConventionCategory>;
+
 export const ConventionCandidate = z.object({
   id: z.string(),
   rule: z.string(),
-  evidence_path: z.string(),
-  evidence_snippet: z.string(),
-  confidence: z.number().min(0).max(1),
+  category: ConventionCategory.nullable(),
+  evidence_path: z.string().nullable(),
+  evidence_snippet: z.string().nullable(),
+  confidence: z.number().min(0).max(1).nullable(),
   accepted: z.boolean(),
+  rejected: z.boolean(),
 });
 export type ConventionCandidate = z.infer<typeof ConventionCandidate>;
 

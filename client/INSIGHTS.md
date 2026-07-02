@@ -5,6 +5,14 @@ Newest first. See `.claude/skills/engineering-insights/SKILL.md` for what belong
 
 ---
 
+## 2026-07-02 — `getByDisplayValue` silently fails on multi-line `<textarea>` values because RTL's default normalizer collapses whitespace
+
+Testing Library's default text normalizer (used by `getByDisplayValue` too, not just `getByText`/`getByPlaceholderText`) collapses all whitespace — including embedded newlines — to single spaces before matching. Asserting `getByDisplayValue(multiLineString)` against a real controlled `<textarea>` whose `.value` contains `\n` therefore never matches, even though the rendered DOM's actual value is byte-identical to the string you passed in (confirmed via the query's own DOM dump in the failure output).
+
+**How to apply:** for any expected value containing a newline (skill/rule bodies, JSON, code snippets), don't use `getByDisplayValue`/`getByText` with the raw multi-line string. Either query the element directly (e.g. `container.querySelector("textarea")!.value`) and assert equality, or pass `{ normalizer: getDefaultNormalizer({ collapseWhitespace: false }) }`. This is the same normalizer class of bug as the `getByPlaceholderText` gotcha already used elsewhere in this codebase — check for embedded `\n` first whenever a multi-line RTL query mysteriously "can't find" an element that's visibly right there in the debug dump.
+
+**Evidence:** `client/src/app/repos/[repoId]/conventions/_components/BundleSkillModal/BundleSkillModal.test.tsx` (`prefills name/description/body from the bundle result on mount` — `getByDisplayValue(BUNDLE_RESULT.body)` failed with a full DOM dump showing the matching `<textarea>` right there; fixed via `container.querySelector("textarea")?.value`).
+
 ## 2026-07-02 — `Markdown` (`vendor/ui/primitives/Markdown.tsx`) is safe against raw-HTML injection, but link hrefs need explicit scheme sanitization
 
 `Markdown` uses `react-markdown` with only `remarkGfm` — no `rehype-raw` plugin (not even installed: check `client/package.json` before assuming otherwise). Without `rehype-raw`, raw HTML in the markdown source (`<script>`, `<img onerror=...>`) is rendered as literal escaped text, never executed — verified with actual `<script>`/`<img onerror>` payloads through the real component, not just by reading the plugin list. This makes it safe by default for untrusted content (e.g. imported skill bodies). It does NOT sanitize link URL schemes on its own though — the custom `a` renderer passed `href` straight through to a real `<a>` tag, so a `[click](javascript:...)` or `[click](data:text/html,...)` link in untrusted markdown would still execute on click. Fixed with a `safeHref()` allowlist (http/https/mailto only) in the `a` renderer.

@@ -5,6 +5,14 @@ Newest first. See `.claude/skills/engineering-insights/SKILL.md` for what belong
 
 ---
 
+## 2026-07-02 — `pnpm db:generate` blocks on an interactive rename-vs-create prompt when a schema diff both adds and drops similarly-named columns in one run
+
+`drizzle-kit generate` is interactive (`@clack/prompts`) whenever its diff is ambiguous — e.g. dropping `conventions.accepted` (boolean) while adding `conventions.category`/`accepted_at` in the same schema edit made it ask "Is `category` created or renamed from `accepted`?" with an arrow-key select menu. This hangs non-interactive shells (CI, this sandbox, piped `echo`/`printf` input — `@clack/prompts` needs a real TTY, not just stdin bytes) with no way to answer it non-interactively.
+
+**How to apply:** split the schema edit into two purely-additive `pnpm db:generate` runs instead of one mixed add+drop edit: (1) add all new columns while temporarily keeping the old one, generate — a pure `ADD COLUMN` diff has no ambiguity and never prompts; (2) remove the old column from the schema, generate again — a pure `DROP COLUMN` diff is equally unambiguous. Two small generated migrations beat fighting the prompt.
+
+**Evidence:** `server/src/db/migrations/0010_wandering_may_parker.sql` (additive: `category`/`evidence_line`/`accepted_at`/`rejected_at`/`created_at`), `0011_fuzzy_malice.sql` (`DROP COLUMN accepted`) — the single-pass attempt reproduced with `pnpm db:generate` prompting `Is category column in conventions table created or renamed from another column?`.
+
 ## 2026-07-02 — There is no multi-user auth yet; "missing workspace membership check" findings on repository methods are false positives
 
 `getContext()` (`modules/_shared/context.ts`) resolves `{ workspaceId, userId }` via `container.auth`, and the only `AuthProvider` today is `LocalNoAuthProvider` (`adapters/auth/local.ts`) — explicit MVP no-login mode. Its `currentWorkspace()`/`currentUser()` either return the single seeded workspace/user (real DB-backed UUIDs) or **throw** (`if (!w) throw new Error(...)`); they never return `undefined`/`null`/empty-string, and `Promise<AuthWorkspace>` types `id: string` as non-optional. Every route in every module derives `workspaceId` exclusively from `getContext()` — never from a URL param, header, or body — so there is no user-controlled input path to a wrong or missing `workspaceId` either.

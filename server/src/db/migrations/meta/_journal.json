@@ -71,6 +71,20 @@
       "when": 1781464392464,
       "tag": "0009_complex_runaways",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1782947407870,
+      "tag": "0010_wandering_may_parker",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1782947423727,
+      "tag": "0011_fuzzy_malice",
+      "breakpoints": true
     }
   ]
 }

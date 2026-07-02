@@ -67,6 +67,14 @@ export function BundleSkillModal({
               toast.success(`Skill "${skill.name}" created and linked to the agent.`);
               onClose();
             },
+            // The skill itself was already created successfully — only the
+            // link step failed. Leaving the modal open would re-enable
+            // "Create skill" and clicking it again would create a SECOND
+            // skill (handleCreate always calls create.mutate unconditionally).
+            // Close instead; the global mutation-error toast already
+            // explains the link failed, and the skill can be linked
+            // manually later from the agent's Skills tab.
+            onError: () => onClose(),
           });
         },
       },

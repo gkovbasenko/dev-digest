@@ -1,11 +1,13 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import type { ConventionCandidate } from "@devdigest/shared";
+import { ApiError } from "@/lib/api";
 
 const {
   mockConventions,
   mockIsLoading,
   mockIsError,
+  mockError,
   mockExtractMutate,
   mockExtractPending,
   mockActionMutate,
@@ -15,6 +17,7 @@ const {
   mockConventions: { current: [] as ConventionCandidate[] },
   mockIsLoading: { current: false },
   mockIsError: { current: false },
+  mockError: { current: null as Error | null },
   mockExtractMutate: vi.fn(),
   mockExtractPending: { current: false },
   mockActionMutate: vi.fn(),
@@ -27,7 +30,7 @@ vi.mock("@/lib/hooks/conventions", () => ({
     data: mockConventions.current,
     isLoading: mockIsLoading.current,
     isError: mockIsError.current,
-    error: null,
+    error: mockError.current,
     refetch: mockRefetch,
   }),
   useExtractConventions: () => ({ mutate: mockExtractMutate, isPending: mockExtractPending.current }),
@@ -49,6 +52,7 @@ afterEach(() => {
   mockConventions.current = [];
   mockIsLoading.current = false;
   mockIsError.current = false;
+  mockError.current = null;
   mockExtractPending.current = false;
   mockExtractMutate.mockReset();
   mockActionMutate.mockReset();
@@ -142,6 +146,21 @@ describe("ConventionsPanel", () => {
     mockIsError.current = true;
     render(<ConventionsPanel repoId="repo1" />);
     expect(screen.getByText("Could not load conventions")).toBeInTheDocument();
+  });
+
+  it("shows the ApiError's own message when the fetch fails with one, instead of the generic fallback", () => {
+    mockIsError.current = true;
+    mockError.current = new ApiError("Repo not found", 404, "not_found");
+    render(<ConventionsPanel repoId="repo1" />);
+    expect(screen.getByText("Repo not found")).toBeInTheDocument();
+    expect(screen.queryByText("Something went wrong.")).not.toBeInTheDocument();
+  });
+
+  it("falls back to a generic message when the fetch fails with a non-ApiError", () => {
+    mockIsError.current = true;
+    mockError.current = new Error("some other failure");
+    render(<ConventionsPanel repoId="repo1" />);
+    expect(screen.getByText("Something went wrong.")).toBeInTheDocument();
   });
 
   it("calls refetch when the error state's Retry button is clicked", () => {

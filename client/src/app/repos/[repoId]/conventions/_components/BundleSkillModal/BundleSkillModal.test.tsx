@@ -188,6 +188,29 @@ describe("BundleSkillModal", () => {
     expect(onClose).toHaveBeenCalledOnce();
   });
 
+  it("closes the modal even if linking to the agent fails (the skill itself was already created; re-showing the form would let a retry create a duplicate skill)", () => {
+    bundleImmediately();
+    mockAgents.current = [AGENT];
+    mockAgentLinks.current = [{ agent_id: "ag1", skill_id: "sk-existing", order: 0 }];
+    mockCreateMutate.mockImplementation(
+      (_input: unknown, opts?: { onSuccess?: (s: { id: string; name: string }) => void }) => {
+        opts?.onSuccess?.({ id: "sk-new", name: "repo-conventions" });
+      },
+    );
+    mockSetAgentSkillsMutate.mockImplementation(
+      (_ids: string[], opts?: { onError?: (err: Error) => void }) => {
+        opts?.onError?.(new Error("network error"));
+      },
+    );
+    const onClose = vi.fn();
+    render(<BundleSkillModal repoId="repo1" onClose={onClose} />);
+
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "ag1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create skill" }));
+
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
   it("shows a loading skeleton and disables Create skill while the bundle result hasn't loaded yet", () => {
     // isPending true + no bundleImmediately() call (never resolves) — this is
     // the actual loadingBundle branch, not just "fields happen to be empty".

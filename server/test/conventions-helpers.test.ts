@@ -82,6 +82,13 @@ describe('verifyEvidence', () => {
     const crlfFile = FILE.replace(/\n/g, '\r\n');
     expect(verifyEvidence(crlfFile, 2, '  return 1;\n}').ok).toBe(true);
   });
+
+  it('rejects a non-integer line number', () => {
+    // The LLM output schema already enforces z.number().int(), but a schema
+    // change or bypass could let a float through — verifyEvidence's own
+    // Number.isInteger guard is the last line of defense.
+    expect(verifyEvidence(FILE, 1.5, 'return 1;').ok).toBe(false);
+  });
 });
 
 /**
@@ -153,6 +160,13 @@ describe('resolveClonePath', () => {
   it('allows the clone root itself (e.g. a "." path)', () => {
     expect(resolveClonePath(CLONE, '.')).toBe(CLONE);
   });
+
+  it('treats an empty file path as the clone root itself', () => {
+    // Not reachable from the LLM output today (the schema requires
+    // evidence_path min(1)), but documents the actual behavior in case a
+    // future caller passes an unvalidated/empty path.
+    expect(resolveClonePath(CLONE, '')).toBe(CLONE);
+  });
 });
 
 /**
@@ -216,6 +230,34 @@ describe('resolveRealClonePath', () => {
       const real = await resolveRealClonePath(clonePath, 'file.txt');
       expect(real).not.toBeNull();
       expect(real).toContain('file.txt');
+    } finally {
+      await rm(clonePath, { recursive: true, force: true });
+    }
+  });
+
+  it('resolves a symlink inside the clone that points to another file inside it (positive control)', async () => {
+    // The negative-control tests below prove escaping symlinks are rejected;
+    // this proves the check doesn't ALSO reject a legitimately in-bounds one.
+    const clonePath = await mkdtemp(join(tmpdir(), 'dd-realpath-'));
+    try {
+      const targetPath = join(clonePath, 'real-file.txt');
+      await writeFile(targetPath, 'hello', 'utf8');
+      await symlink(targetPath, join(clonePath, 'in-bounds-link.txt'));
+
+      const real = await resolveRealClonePath(clonePath, 'in-bounds-link.txt');
+      expect(real).not.toBeNull();
+      expect(real).toContain('real-file.txt');
+    } finally {
+      await rm(clonePath, { recursive: true, force: true });
+    }
+  });
+
+  it('returns null for a broken symlink (target does not exist)', async () => {
+    const clonePath = await mkdtemp(join(tmpdir(), 'dd-realpath-'));
+    try {
+      await symlink(join(clonePath, 'does-not-exist.txt'), join(clonePath, 'broken-link.txt'));
+      const real = await resolveRealClonePath(clonePath, 'broken-link.txt');
+      expect(real).toBeNull();
     } finally {
       await rm(clonePath, { recursive: true, force: true });
     }

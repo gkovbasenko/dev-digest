@@ -86,4 +86,16 @@ describe('conventions routes (no DB)', () => {
     expect(res.json().error.code).toBe('validation_error');
     await app.close();
   });
+
+  it('PATCH /conventions/:id → 422 when the body is empty (would otherwise reach an empty Drizzle .set() and 500)', async () => {
+    const app = await buildApp({ config });
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/conventions/11111111-1111-1111-1111-111111111111',
+      payload: {},
+    });
+    expect(res.statusCode).toBe(422);
+    expect(res.json().error.code).toBe('validation_error');
+    await app.close();
+  });
 });

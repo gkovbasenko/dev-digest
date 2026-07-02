@@ -26,6 +26,12 @@ const UpdateConventionBody = z
   })
   .refine((b) => !(b.accepted === true && b.rejected === true), {
     message: 'A candidate cannot be both accepted and rejected',
+  })
+  // An empty {} would reach ConventionsRepository.update() with an empty
+  // Drizzle .set() call, which throws "No values to set" — a 500, not a
+  // clean validation error. Reject it here instead.
+  .refine((b) => Object.keys(b).length > 0, {
+    message: 'Provide at least one field to update',
   });
 
 const SkillBundleResponse = z.object({

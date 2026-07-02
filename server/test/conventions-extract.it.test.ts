@@ -404,4 +404,68 @@ d('Conventions extraction lifecycle (POST extract / GET / PATCH / POST bundle)',
     expect(res.json().error.code).toBe('validation_error');
     await app.close();
   });
+
+  it('POST /repos/:id/conventions/extract → validation error when the repo has no indexed source files', async () => {
+    // Cloned (has a clonePath, passes the first check) but no file_rank rows
+    // at all — a distinct error path from "not cloned", hit when a user runs
+    // extraction before /repos/:id/resync has ever indexed the repo.
+    const clonePath = await mkdtemp(join(tmpdir(), 'dd-conventions-'));
+    const suffix = Math.random().toString(36).slice(2);
+    const [repo] = await pg.handle.db
+      .insert(t.repos)
+      .values({
+        workspaceId,
+        owner: 'acme',
+        name: `unindexed-${suffix}`,
+        fullName: `acme/unindexed-${suffix}`,
+        defaultBranch: 'main',
+        clonePath,
+      })
+      .returning();
+
+    const app = await makeApp([VALID_CANDIDATE]);
+    const res = await app.inject({
+      method: 'POST',
+      url: `/repos/${repo!.id}/conventions/extract`,
+    });
+    expect(res.statusCode).toBe(422);
+    expect(res.json().error.code).toBe('validation_error');
+    await app.close();
+  });
+
+  it('PATCH /conventions/:id → partial updates persist independently (rule-only, then category-only)', async () => {
+    const { repoId } = await makeRepoWithSamples();
+    const app = await makeApp([VALID_CANDIDATE]);
+    const extracted = await app.inject({
+      method: 'POST',
+      url: `/repos/${repoId}/conventions/extract`,
+    });
+    const candidateId = extracted.json()[0].id;
+
+    const ruleOnly = await app.inject({
+      method: 'PATCH',
+      url: `/conventions/${candidateId}`,
+      payload: { rule: 'Renamed rule text' },
+    });
+    expect(ruleOnly.statusCode).toBe(200);
+    expect(ruleOnly.json().rule).toBe('Renamed rule text');
+    // category untouched by the rule-only patch
+    expect(ruleOnly.json().category).toBe(VALID_CANDIDATE.category);
+
+    const categoryOnly = await app.inject({
+      method: 'PATCH',
+      url: `/conventions/${candidateId}`,
+      payload: { category: 'testing' },
+    });
+    expect(categoryOnly.statusCode).toBe(200);
+    expect(categoryOnly.json().category).toBe('testing');
+    // rule untouched by the category-only patch (still the earlier rename)
+    expect(categoryOnly.json().rule).toBe('Renamed rule text');
+
+    const list = await app.inject({ method: 'GET', url: `/repos/${repoId}/conventions` });
+    expect(list.json()[0].rule).toBe('Renamed rule text');
+    expect(list.json()[0].category).toBe('testing');
+
+    await app.close();
+  });
 });

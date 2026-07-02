@@ -96,6 +96,17 @@ describe("ConventionCandidateCard", () => {
       expect(screen.queryByText("src/modules/foo/service.ts")).not.toBeInTheDocument();
     });
 
+    it("renders evidence_path as plain text (no href) when repoFullName/defaultBranch are missing", () => {
+      // Realistic: the page renders before activeRepo has loaded, so
+      // repoFullName/defaultBranch are still undefined while candidates are
+      // already in. evidenceHref returns undefined in that case — MonoLink
+      // must degrade to a plain button, not a broken/undefined-href anchor.
+      render(<ConventionCandidateCard c={CANDIDATE} onAction={() => {}} />);
+      const link = screen.getByText(CANDIDATE.evidence_path!);
+      expect(link.closest("a")).not.toBeInTheDocument();
+      expect(link.closest("button")).toBeInTheDocument();
+    });
+
     it("renders without a snippet block when evidence_snippet is null", () => {
       const { container } = render(
         <ConventionCandidateCard c={{ ...CANDIDATE, evidence_snippet: null }} onAction={() => {}} />,

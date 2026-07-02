@@ -27,6 +27,16 @@ describe('conventions routes (no DB)', () => {
     await app.close();
   });
 
+  it('POST /repos/:id/conventions/bundle → 422 when :id is not a uuid', async () => {
+    const app = await buildApp({ config });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/repos/not-a-uuid/conventions/bundle',
+    });
+    expect(res.statusCode).toBe(422);
+    await app.close();
+  });
+
   it('PATCH /conventions/:id → 422 when :id is not a uuid', async () => {
     const app = await buildApp({ config });
     const res = await app.inject({

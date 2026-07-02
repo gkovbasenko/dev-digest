@@ -198,6 +198,14 @@ describe("BundleSkillModal", () => {
     expect(screen.getByRole("button", { name: "Create skill" })).toBeDisabled();
   });
 
+  it("disables Create skill when the body textarea is manually cleared", () => {
+    bundleImmediately();
+    const { container } = render(<BundleSkillModal repoId="repo1" onClose={() => {}} />);
+    const textarea = container.querySelector("textarea")!;
+    fireEvent.change(textarea, { target: { value: "   " } }); // whitespace-only
+    expect(screen.getByRole("button", { name: "Create skill" })).toBeDisabled();
+  });
+
   it("shows 'Saving…' and disables the button while the create mutation is in flight", () => {
     bundleImmediately();
     mockCreatePending.current = true;

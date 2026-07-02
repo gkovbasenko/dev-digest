@@ -57,6 +57,17 @@ describe('verifyEvidence', () => {
     expect(verifyEvidence('const x = 1;', 1, 'const x = 1;').ok).toBe(true);
     expect(verifyEvidence('const x = 1;', 1, 'nonexistent').ok).toBe(false);
   });
+
+  it('accepts a multi-line snippet that spans exactly the lines it claims to', () => {
+    // Nothing in the schema stops the LLM from citing a multi-line block —
+    // the window is joined with the same '\n' the snippet would contain, so
+    // a snippet spanning two real, contiguous lines should still match.
+    expect(verifyEvidence(FILE, 2, '  return 1;\n}').ok).toBe(true);
+  });
+
+  it('rejects a multi-line snippet that does not appear in the file', () => {
+    expect(verifyEvidence(FILE, 2, 'return 1;\nsomething else entirely').ok).toBe(false);
+  });
 });
 
 /**

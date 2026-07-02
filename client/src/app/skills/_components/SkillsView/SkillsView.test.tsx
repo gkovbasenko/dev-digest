@@ -163,9 +163,9 @@ describe("SkillsView — confirm before discarding an unsaved edit", () => {
     mockSelectedSkill.current = SKILL_A;
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
 
-    render(<SkillsView />);
+    const { container } = render(<SkillsView />);
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
-    fireEvent.change(screen.getByRole("textbox"), { target: { value: "edited body" } });
+    fireEvent.change(container.querySelector("textarea")!, { target: { value: "edited body" } });
 
     mockRouterReplace.mockReset();
     fireEvent.click(screen.getByText("Skill B"));
@@ -182,9 +182,9 @@ describe("SkillsView — confirm before discarding an unsaved edit", () => {
     mockSelectedSkill.current = SKILL_A;
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
 
-    render(<SkillsView />);
+    const { container } = render(<SkillsView />);
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
-    fireEvent.change(screen.getByRole("textbox"), { target: { value: "edited body" } });
+    fireEvent.change(container.querySelector("textarea")!, { target: { value: "edited body" } });
 
     mockRouterReplace.mockReset();
     fireEvent.click(screen.getByText("Skill B"));

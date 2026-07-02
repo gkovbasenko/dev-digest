@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Icon, Badge, Markdown, Toggle, Button, FormField, Textarea } from "@devdigest/ui";
+import { Icon, Badge, Markdown, Toggle, Button, TextInput, Textarea } from "@devdigest/ui";
 import type { Skill, SkillType } from "@devdigest/shared";
 import { useUpdateSkill, useDeleteSkill } from "../../../../lib/hooks/skills";
 import { useToast } from "../../../../lib/toast";
@@ -34,6 +34,7 @@ export function SkillPreview({
   const toast = useToast();
   const [editing, setEditing] = React.useState(false);
   const [body, setBody] = React.useState(skill.body);
+  const [description, setDescription] = React.useState(skill.description);
   // Optimistic local mirror of skill.enabled — without it, the Toggle only
   // moves once the mutation resolves and the query cache refreshes, which
   // reads as an unresponsive switch on a slow network. Reverted on error.
@@ -41,11 +42,12 @@ export function SkillPreview({
 
   React.useEffect(() => {
     setBody(skill.body);
+    setDescription(skill.description);
     setEnabled(skill.enabled);
     setEditing(false);
   }, [skill.id]);
 
-  const isDirty = editing && body !== skill.body;
+  const isDirty = editing && (body !== skill.body || description !== skill.description);
   React.useEffect(() => {
     onDirtyChange?.(isDirty);
     // Clear the dirty flag on unmount (switching away via the key change) so
@@ -72,9 +74,11 @@ export function SkillPreview({
     );
   };
 
-  const saveBody = () =>
+  const saveEdits = () =>
     update.mutate(
-      { id: skill.id, patch: { body } },
+      // description-only edits don't bump the skill's version — the server
+      // only bumps it when `body` actually changes.
+      { id: skill.id, patch: { body, description } },
       {
         onSuccess: () => {
           setEditing(false);
@@ -134,6 +138,27 @@ export function SkillPreview({
       )}
 
       <div>
+        <div style={s.bodyLabel}>Description</div>
+        {editing ? (
+          <TextInput
+            value={description}
+            onChange={setDescription}
+            placeholder="What does this skill check?"
+          />
+        ) : (
+          <div
+            style={{
+              fontSize: 14,
+              color: skill.description ? "var(--text-secondary)" : "var(--text-muted)",
+              lineHeight: 1.5,
+            }}
+          >
+            {skill.description || "No description"}
+          </div>
+        )}
+      </div>
+
+      <div>
         <div style={s.bodyLabel}>Skill body (Markdown)</div>
         {editing ? (
           <Textarea value={body} onChange={setBody} rows={16} mono />
@@ -147,10 +172,17 @@ export function SkillPreview({
       <div style={s.previewActions}>
         {editing ? (
           <>
-            <Button kind="primary" onClick={saveBody} disabled={update.isPending}>
+            <Button kind="primary" onClick={saveEdits} disabled={update.isPending}>
               {update.isPending ? "Saving…" : "Save"}
             </Button>
-            <Button kind="ghost" onClick={() => { setEditing(false); setBody(skill.body); }}>
+            <Button
+              kind="ghost"
+              onClick={() => {
+                setEditing(false);
+                setBody(skill.body);
+                setDescription(skill.description);
+              }}
+            >
               Cancel
             </Button>
             <span style={{ fontSize: 12, color: "var(--text-muted)" }}>

@@ -129,7 +129,12 @@ describe("SkillPreview — inline edit/save/cancel", () => {
     expect(mockMutate).toHaveBeenCalledWith(
       {
         id: "sk1",
-        patch: { body: "# Rule\nDo the NEW thing.", description: BASE_SKILL.description },
+        patch: {
+          name: BASE_SKILL.name,
+          type: BASE_SKILL.type,
+          body: "# Rule\nDo the NEW thing.",
+          description: BASE_SKILL.description,
+        },
       },
       expect.any(Object),
     );
@@ -223,7 +228,15 @@ describe("SkillPreview — description", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     expect(mockMutate).toHaveBeenCalledWith(
-      { id: "sk1", patch: { body: BASE_SKILL.body, description: "Updated description" } },
+      {
+        id: "sk1",
+        patch: {
+          name: BASE_SKILL.name,
+          type: BASE_SKILL.type,
+          body: BASE_SKILL.body,
+          description: "Updated description",
+        },
+      },
       expect.any(Object),
     );
   });
@@ -239,6 +252,89 @@ describe("SkillPreview — description", () => {
 
     expect(mockMutate).not.toHaveBeenCalled();
     expect(screen.getByText(BASE_SKILL.description)).toBeInTheDocument();
+  });
+});
+
+describe("SkillPreview — name and type editing", () => {
+  afterEach(() => {
+    mockMutate.mockReset();
+    mockIsPending.current = false;
+  });
+
+  it("shows the name as a heading and the type as a badge when not editing", () => {
+    render(<SkillPreview skill={BASE_SKILL} />);
+    expect(screen.getByRole("heading", { name: BASE_SKILL.name })).toBeInTheDocument();
+    expect(screen.getByText(BASE_SKILL.type)).toBeInTheDocument();
+  });
+
+  it("Edit reveals editable name/type fields seeded with the current values", () => {
+    render(<SkillPreview skill={BASE_SKILL} />);
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+
+    expect(screen.getByPlaceholderText("Skill name")).toHaveValue(BASE_SKILL.name);
+    expect(screen.getByRole("combobox")).toHaveValue(BASE_SKILL.type);
+  });
+
+  it("Save sends the edited name and type in the mutation patch", () => {
+    mockMutate.mockImplementation(() => {});
+    render(<SkillPreview skill={BASE_SKILL} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByPlaceholderText("Skill name"), {
+      target: { value: "renamed-skill" },
+    });
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "security" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(mockMutate).toHaveBeenCalledWith(
+      {
+        id: "sk1",
+        patch: {
+          name: "renamed-skill",
+          type: "security",
+          body: BASE_SKILL.body,
+          description: BASE_SKILL.description,
+        },
+      },
+      expect.any(Object),
+    );
+  });
+
+  it("trims whitespace from the name before saving", () => {
+    mockMutate.mockImplementation(() => {});
+    render(<SkillPreview skill={BASE_SKILL} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByPlaceholderText("Skill name"), {
+      target: { value: "  padded-name  " },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(mockMutate).toHaveBeenCalledWith(
+      expect.objectContaining({ patch: expect.objectContaining({ name: "padded-name" }) }),
+      expect.any(Object),
+    );
+  });
+
+  it("disables Save when the name is emptied out or whitespace-only", () => {
+    render(<SkillPreview skill={BASE_SKILL} />);
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+
+    fireEvent.change(screen.getByPlaceholderText("Skill name"), { target: { value: "   " } });
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+  });
+
+  it("Cancel reverts an edited name/type without mutating", () => {
+    render(<SkillPreview skill={BASE_SKILL} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByPlaceholderText("Skill name"), { target: { value: "throwaway" } });
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "security" } });
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(mockMutate).not.toHaveBeenCalled();
+    expect(screen.getByRole("heading", { name: BASE_SKILL.name })).toBeInTheDocument();
+    expect(screen.getByText(BASE_SKILL.type)).toBeInTheDocument();
   });
 });
 

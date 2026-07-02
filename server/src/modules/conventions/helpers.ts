@@ -17,19 +17,26 @@ export function toConventionDto(row: ConventionRow): ConventionCandidate {
   };
 }
 
+/** Is `candidate` equal to `root`, or nested inside it? Both must already be resolved/absolute. */
+export function isWithinRoot(root: string, candidate: string): boolean {
+  return candidate === root || candidate.startsWith(root + sep);
+}
+
 /**
  * Resolve `file` against `clonePath` and return the resolved absolute path,
  * or null if it would escape the clone directory (path traversal via `../`,
- * or an absolute path that overrides the base entirely). `evidence_path`
- * comes straight from the LLM's structured output — untrusted, since a
- * malicious repo could try to prompt-inject a traversal path into it — so
- * this containment check runs before any filesystem read ever touches it.
+ * or an absolute path that overrides the base entirely). This is a purely
+ * syntactic check — it does NOT follow symlinks, so it does not by itself
+ * defend against a symlink committed inside the clone that points outside
+ * it (a git repo can commit one; checkout materializes it as a real
+ * symlink). Callers that actually read the file must additionally realpath
+ * the result and re-check containment — see `resolveRealClonePath` in
+ * `service.ts`, the actual read boundary.
  */
 export function resolveClonePath(clonePath: string, file: string): string | null {
   const root = resolve(clonePath);
   const resolved = resolve(root, file);
-  if (resolved !== root && !resolved.startsWith(root + sep)) return null;
-  return resolved;
+  return isWithinRoot(root, resolved) ? resolved : null;
 }
 
 export interface EvidenceCheck {

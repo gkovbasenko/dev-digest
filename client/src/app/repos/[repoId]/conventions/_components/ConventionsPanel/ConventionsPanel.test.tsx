@@ -9,6 +9,7 @@ const {
   mockExtractMutate,
   mockExtractPending,
   mockActionMutate,
+  mockActionPending,
   mockRefetch,
 } = vi.hoisted(() => ({
   mockConventions: { current: [] as ConventionCandidate[] },
@@ -17,6 +18,7 @@ const {
   mockExtractMutate: vi.fn(),
   mockExtractPending: { current: false },
   mockActionMutate: vi.fn(),
+  mockActionPending: { current: false },
   mockRefetch: vi.fn(),
 }));
 
@@ -29,7 +31,7 @@ vi.mock("@/lib/hooks/conventions", () => ({
     refetch: mockRefetch,
   }),
   useExtractConventions: () => ({ mutate: mockExtractMutate, isPending: mockExtractPending.current }),
-  useConventionAction: () => ({ mutate: mockActionMutate, isPending: false }),
+  useConventionAction: () => ({ mutate: mockActionMutate, isPending: mockActionPending.current }),
 }));
 
 vi.mock("../BundleSkillModal", () => ({
@@ -50,6 +52,7 @@ afterEach(() => {
   mockExtractPending.current = false;
   mockExtractMutate.mockReset();
   mockActionMutate.mockReset();
+  mockActionPending.current = false;
   mockRefetch.mockReset();
 });
 
@@ -115,6 +118,17 @@ describe("ConventionsPanel", () => {
       repoId: "repo1",
       patch: { accepted: true },
     });
+  });
+
+  it("disables every card's Accept/Reject/Edit buttons while a convention action is pending", () => {
+    mockConventions.current = [CANDIDATE, { ...CANDIDATE, id: "c2", rule: "Another rule" }];
+    mockActionPending.current = true;
+    render(<ConventionsPanel repoId="repo1" />);
+    for (const btnText of ["Accept", "Reject", "Edit"]) {
+      for (const btn of screen.getAllByText(btnText)) {
+        expect(btn.closest("button")).toBeDisabled();
+      }
+    }
   });
 
   it("shows loading skeletons while isLoading", () => {

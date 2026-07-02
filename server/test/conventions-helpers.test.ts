@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { sep } from 'node:path';
+import { sep, join } from 'node:path';
+import { mkdtemp, mkdir, writeFile, symlink, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { verifyEvidence, resolveClonePath } from '../src/modules/conventions/helpers.js';
+import { resolveRealClonePath } from '../src/modules/conventions/service.js';
 
 /**
  * Unit coverage for verifyEvidence — the code-level check that drops any
@@ -44,6 +47,11 @@ describe('verifyEvidence', () => {
     expect(check.ok).toBe(false);
     expect(check.reason).toMatch(/empty/);
   });
+
+  it('rejects any claim against empty file content', () => {
+    const check = verifyEvidence('', 1, 'anything');
+    expect(check.ok).toBe(false);
+  });
 });
 
 /**
@@ -82,5 +90,79 @@ describe('resolveClonePath', () => {
 
   it('allows the clone root itself (e.g. a "." path)', () => {
     expect(resolveClonePath(CLONE, '.')).toBe(CLONE);
+  });
+});
+
+/**
+ * Unit coverage for resolveRealClonePath — resolveClonePath is purely
+ * syntactic (string manipulation, no filesystem access), so it cannot catch
+ * a symlink planted INSIDE the clone that points OUTSIDE it. A git repo can
+ * commit a symlink (mode 120000); `git clone` materializes it as a real
+ * symlink on checkout. resolveRealClonePath is the actual read boundary —
+ * it realpaths the resolved path and re-checks containment against the
+ * real (symlink-resolved) target, not just the syntactic one.
+ */
+describe('resolveRealClonePath', () => {
+  it('resolves a normal file inside the clone to its real path', async () => {
+    const clonePath = await mkdtemp(join(tmpdir(), 'dd-realpath-'));
+    try {
+      await writeFile(join(clonePath, 'file.txt'), 'hello', 'utf8');
+      const real = await resolveRealClonePath(clonePath, 'file.txt');
+      expect(real).not.toBeNull();
+      expect(real).toContain('file.txt');
+    } finally {
+      await rm(clonePath, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects a symlink inside the clone that points to a file outside it', async () => {
+    const clonePath = await mkdtemp(join(tmpdir(), 'dd-realpath-'));
+    const outsideDir = await mkdtemp(join(tmpdir(), 'dd-outside-'));
+    try {
+      const secretPath = join(outsideDir, 'secret.txt');
+      await writeFile(secretPath, 'SECRET_TOKEN', 'utf8');
+      // A repo can commit a symlink (git mode 120000) that checkout
+      // materializes as a real one — simulate that here.
+      await symlink(secretPath, join(clonePath, 'evil-link.txt'));
+
+      const real = await resolveRealClonePath(clonePath, 'evil-link.txt');
+      expect(real).toBeNull();
+    } finally {
+      await rm(clonePath, { recursive: true, force: true });
+      await rm(outsideDir, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects a symlinked directory inside the clone whose target escapes it', async () => {
+    const clonePath = await mkdtemp(join(tmpdir(), 'dd-realpath-'));
+    const outsideDir = await mkdtemp(join(tmpdir(), 'dd-outside-'));
+    try {
+      await writeFile(join(outsideDir, 'secret.txt'), 'SECRET_TOKEN', 'utf8');
+      await symlink(outsideDir, join(clonePath, 'linked-dir'), 'dir');
+
+      const real = await resolveRealClonePath(clonePath, 'linked-dir/secret.txt');
+      expect(real).toBeNull();
+    } finally {
+      await rm(clonePath, { recursive: true, force: true });
+      await rm(outsideDir, { recursive: true, force: true });
+    }
+  });
+
+  it('returns null for a nonexistent file (not an exception)', async () => {
+    const clonePath = await mkdtemp(join(tmpdir(), 'dd-realpath-'));
+    try {
+      expect(await resolveRealClonePath(clonePath, 'does/not/exist.ts')).toBeNull();
+    } finally {
+      await rm(clonePath, { recursive: true, force: true });
+    }
+  });
+
+  it('still rejects a syntactic traversal (delegates to resolveClonePath first)', async () => {
+    const clonePath = await mkdtemp(join(tmpdir(), 'dd-realpath-'));
+    try {
+      expect(await resolveRealClonePath(clonePath, '../../../../etc/passwd')).toBeNull();
+    } finally {
+      await rm(clonePath, { recursive: true, force: true });
+    }
   });
 });

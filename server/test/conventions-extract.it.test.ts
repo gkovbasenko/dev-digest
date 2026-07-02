@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { startPg, dockerAvailable, type PgFixture } from './helpers/pg.js';
@@ -62,6 +62,15 @@ const TRAVERSAL_CANDIDATE = {
   rule: 'A rule citing evidence outside the clone directory (path traversal)',
   category: 'naming',
   evidence_path: '../secret-outside.txt',
+  evidence_line: 1,
+  evidence_snippet: 'SECRET_TOKEN_12345',
+  confidence: 0.9,
+};
+
+const SYMLINK_CANDIDATE = {
+  rule: 'A rule citing a symlinked evidence path escaping the clone',
+  category: 'naming',
+  evidence_path: 'evil-link.txt',
   evidence_line: 1,
   evidence_snippet: 'SECRET_TOKEN_12345',
   confidence: 0.9,
@@ -160,6 +169,70 @@ d('Conventions extraction lifecycle (POST extract / GET / PATCH / POST bundle)',
 
     const list = await app.inject({ method: 'GET', url: `/repos/${repoId}/conventions` });
     expect(list.json()).toHaveLength(0);
+
+    await app.close();
+  });
+
+  it('drops a candidate whose evidence_path is a symlink escaping the clone directory', async () => {
+    // resolveClonePath alone is syntactic (no filesystem access) — it can't
+    // catch a symlink planted INSIDE the clone that points OUTSIDE it. git
+    // supports committing symlinks (mode 120000); checkout materializes them
+    // as real ones. Prove resolveRealClonePath's realpath-based check closes
+    // this specific gap, distinct from the string-traversal case above.
+    const { repoId, clonePath } = await makeRepoWithSamples();
+    const outsideDir = await mkdtemp(join(tmpdir(), 'dd-outside-'));
+    const secretPath = join(outsideDir, 'secret.txt');
+    await writeFile(secretPath, SECRET_OUTSIDE_CONTENT, 'utf8');
+    await symlink(secretPath, join(clonePath, 'evil-link.txt'));
+
+    const app = await makeApp([SYMLINK_CANDIDATE]);
+    const res = await app.inject({
+      method: 'POST',
+      url: `/repos/${repoId}/conventions/extract`,
+    });
+    expect(res.statusCode).toBe(201);
+    expect(res.json()).toHaveLength(0);
+
+    const list = await app.inject({ method: 'GET', url: `/repos/${repoId}/conventions` });
+    expect(list.json()).toHaveLength(0);
+
+    await app.close();
+  });
+
+  it('never sends a symlinked config file\'s off-clone content to the LLM (unconditional sample read, no candidate involved)', async () => {
+    // The MOST severe form of this bug: readSampled() reads every
+    // CONFIG_FILE_CANDIDATES filename unconditionally while building the
+    // prompt — no LLM cooperation or evidence_path needed at all. If
+    // tsconfig.json in a malicious repo were a symlink to, say, a .env file,
+    // its content would flow straight into the third-party LLM API call.
+    const { repoId, clonePath } = await makeRepoWithSamples();
+    const outsideDir = await mkdtemp(join(tmpdir(), 'dd-outside-'));
+    const secretPath = join(outsideDir, 'secret.txt');
+    await writeFile(secretPath, SECRET_OUTSIDE_CONTENT, 'utf8');
+    await symlink(secretPath, join(clonePath, 'tsconfig.json'));
+
+    const llm = new MockLLMProvider('openai', { structured: { candidates: [] } });
+    const config = loadConfig({ ...process.env, NODE_ENV: 'test' } as NodeJS.ProcessEnv);
+    const app = await buildApp({
+      config,
+      db: pg.handle.db,
+      overrides: {
+        git: new MockGitClient(),
+        github: new MockGitHubClient(),
+        llm: { openai: llm },
+      },
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/repos/${repoId}/conventions/extract`,
+    });
+    expect(res.statusCode).toBe(201);
+
+    const structuredCall = llm.calls.find((c) => c.method === 'completeStructured');
+    expect(structuredCall).toBeDefined();
+    const promptText = JSON.stringify(structuredCall!.req);
+    expect(promptText).not.toContain('SECRET_TOKEN_12345');
 
     await app.close();
   });

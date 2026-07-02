@@ -11,6 +11,7 @@ const BUNDLE_RESULT = {
 
 const {
   mockBundleMutate,
+  mockBundlePending,
   mockAgents,
   mockAgentLinks,
   mockCreateMutate,
@@ -19,6 +20,7 @@ const {
   mockSetAgentSkillsPending,
 } = vi.hoisted(() => ({
   mockBundleMutate: vi.fn(),
+  mockBundlePending: { current: false },
   mockAgents: { current: [] as Agent[] },
   mockAgentLinks: { current: [] as AgentSkillLink[] },
   mockCreateMutate: vi.fn(),
@@ -28,7 +30,11 @@ const {
 }));
 
 vi.mock("@/lib/hooks/conventions", () => ({
-  useBundleConventions: () => ({ mutate: mockBundleMutate, isPending: false, data: undefined }),
+  useBundleConventions: () => ({
+    mutate: mockBundleMutate,
+    isPending: mockBundlePending.current,
+    data: undefined,
+  }),
 }));
 
 vi.mock("@/lib/hooks/agents", () => ({
@@ -57,6 +63,7 @@ afterEach(() => {
   mockSetAgentSkillsMutate.mockReset();
   mockAgents.current = [];
   mockAgentLinks.current = [];
+  mockBundlePending.current = false;
   mockCreatePending.current = false;
   mockSetAgentSkillsPending.current = false;
 });
@@ -168,9 +175,26 @@ describe("BundleSkillModal", () => {
     expect(onClose).toHaveBeenCalledOnce();
   });
 
-  it("disables Create skill while the bundle result hasn't loaded yet", () => {
-    // no bundleImmediately() call — mutate never resolves synchronously
+  it("shows a loading skeleton and disables Create skill while the bundle result hasn't loaded yet", () => {
+    // isPending true + no bundleImmediately() call (never resolves) — this is
+    // the actual loadingBundle branch, not just "fields happen to be empty".
+    mockBundlePending.current = true;
+    const { container } = render(<BundleSkillModal repoId="repo1" onClose={() => {}} />);
+    expect(container.querySelectorAll(".skeleton").length).toBeGreaterThan(0);
+    expect(screen.queryByPlaceholderText("repo-conventions")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create skill" })).toBeDisabled();
+  });
+
+  it("disables Create skill once loaded if the bundle result has an empty name (independent of loadingBundle)", () => {
+    mockBundleMutate.mockImplementation(
+      (_v: undefined, opts?: { onSuccess?: (r: typeof BUNDLE_RESULT) => void }) => {
+        opts?.onSuccess?.({ ...BUNDLE_RESULT, name: "" });
+      },
+    );
     render(<BundleSkillModal repoId="repo1" onClose={() => {}} />);
+    // loadingBundle is false here (isPending defaults to false, mutate already
+    // "resolved") — the button is disabled purely because name is empty.
+    expect(screen.queryByText(BUNDLE_RESULT.name)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Create skill" })).toBeDisabled();
   });
 

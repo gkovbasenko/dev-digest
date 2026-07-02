@@ -165,7 +165,7 @@ describe("SkillsView — confirm before discarding an unsaved edit", () => {
 
     const { container } = render(<SkillsView />);
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
-    fireEvent.change(container.querySelector("textarea")!, { target: { value: "edited body" } });
+    fireEvent.change(container.querySelector("textarea.mono")!, { target: { value: "edited body" } });
 
     mockRouterReplace.mockReset();
     fireEvent.click(screen.getByText("Skill B"));
@@ -184,7 +184,7 @@ describe("SkillsView — confirm before discarding an unsaved edit", () => {
 
     const { container } = render(<SkillsView />);
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
-    fireEvent.change(container.querySelector("textarea")!, { target: { value: "edited body" } });
+    fireEvent.change(container.querySelector("textarea.mono")!, { target: { value: "edited body" } });
 
     mockRouterReplace.mockReset();
     fireEvent.click(screen.getByText("Skill B"));

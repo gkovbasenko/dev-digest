@@ -106,11 +106,11 @@ describe("SkillPreview — inline edit/save/cancel", () => {
 
   it("Edit switches to the textarea, seeded with the current body", () => {
     const { container } = render(<SkillPreview skill={BASE_SKILL} />);
-    expect(container.querySelector("textarea")).not.toBeInTheDocument();
+    expect(container.querySelector("textarea.mono")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
 
-    expect(container.querySelector("textarea")).toHaveValue(BASE_SKILL.body);
+    expect(container.querySelector("textarea.mono")).toHaveValue(BASE_SKILL.body);
     expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
@@ -121,7 +121,7 @@ describe("SkillPreview — inline edit/save/cancel", () => {
     const { container } = render(<SkillPreview skill={BASE_SKILL} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
-    fireEvent.change(container.querySelector("textarea")!, {
+    fireEvent.change(container.querySelector("textarea.mono")!, {
       target: { value: "# Rule\nDo the NEW thing." },
     });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -147,12 +147,12 @@ describe("SkillPreview — inline edit/save/cancel", () => {
     const { container } = render(<SkillPreview skill={BASE_SKILL} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
-    fireEvent.change(container.querySelector("textarea")!, {
+    fireEvent.change(container.querySelector("textarea.mono")!, {
       target: { value: "# Rule\nDo the NEW thing." },
     });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
-    expect(container.querySelector("textarea")).not.toBeInTheDocument();
+    expect(container.querySelector("textarea.mono")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
   });
 
@@ -161,26 +161,26 @@ describe("SkillPreview — inline edit/save/cancel", () => {
     const { container } = render(<SkillPreview skill={BASE_SKILL} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
-    fireEvent.change(container.querySelector("textarea")!, { target: { value: "unsaved edit" } });
+    fireEvent.change(container.querySelector("textarea.mono")!, { target: { value: "unsaved edit" } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
-    expect(container.querySelector("textarea")).toHaveValue("unsaved edit");
+    expect(container.querySelector("textarea.mono")).toHaveValue("unsaved edit");
   });
 
   it("Cancel reverts to the original body and exits edit mode without mutating", () => {
     const { container } = render(<SkillPreview skill={BASE_SKILL} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
-    fireEvent.change(container.querySelector("textarea")!, { target: { value: "a throwaway edit" } });
+    fireEvent.change(container.querySelector("textarea.mono")!, { target: { value: "a throwaway edit" } });
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
     expect(mockMutate).not.toHaveBeenCalled();
-    expect(container.querySelector("textarea")).not.toBeInTheDocument();
+    expect(container.querySelector("textarea.mono")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
 
     // Re-entering edit mode shows the ORIGINAL body, not the discarded edit.
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
-    expect(container.querySelector("textarea")).toHaveValue(BASE_SKILL.body);
+    expect(container.querySelector("textarea.mono")).toHaveValue(BASE_SKILL.body);
   });
 
   it("disables Save and shows a pending label while the save mutation is in flight", () => {
@@ -353,7 +353,7 @@ describe("SkillPreview — onDirtyChange", () => {
     // Entering edit mode alone isn't dirty — the body hasn't changed yet.
     expect(onDirtyChange).toHaveBeenLastCalledWith(false);
 
-    fireEvent.change(container.querySelector("textarea")!, { target: { value: "edited body" } });
+    fireEvent.change(container.querySelector("textarea.mono")!, { target: { value: "edited body" } });
     expect(onDirtyChange).toHaveBeenLastCalledWith(true);
   });
 
@@ -373,7 +373,7 @@ describe("SkillPreview — onDirtyChange", () => {
     const { container } = render(<SkillPreview skill={BASE_SKILL} onDirtyChange={onDirtyChange} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
-    fireEvent.change(container.querySelector("textarea")!, { target: { value: "edited body" } });
+    fireEvent.change(container.querySelector("textarea.mono")!, { target: { value: "edited body" } });
     expect(onDirtyChange).toHaveBeenLastCalledWith(true);
 
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
@@ -386,7 +386,7 @@ describe("SkillPreview — onDirtyChange", () => {
     const { container } = render(<SkillPreview skill={BASE_SKILL} onDirtyChange={onDirtyChange} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
-    fireEvent.change(container.querySelector("textarea")!, { target: { value: "edited body" } });
+    fireEvent.change(container.querySelector("textarea.mono")!, { target: { value: "edited body" } });
     expect(onDirtyChange).toHaveBeenLastCalledWith(true);
 
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -400,7 +400,7 @@ describe("SkillPreview — onDirtyChange", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
-    fireEvent.change(container.querySelector("textarea")!, { target: { value: "edited body" } });
+    fireEvent.change(container.querySelector("textarea.mono")!, { target: { value: "edited body" } });
     expect(onDirtyChange).toHaveBeenLastCalledWith(true);
 
     unmount();

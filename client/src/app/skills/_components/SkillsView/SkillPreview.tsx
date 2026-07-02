@@ -163,9 +163,10 @@ export function SkillPreview({
       <div>
         <div style={s.bodyLabel}>Description</div>
         {editing ? (
-          <TextInput
+          <Textarea
             value={description}
             onChange={setDescription}
+            rows={3}
             placeholder="What does this skill check?"
           />
         ) : (

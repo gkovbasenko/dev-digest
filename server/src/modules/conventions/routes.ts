@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { SkillType } from '@devdigest/shared';
+import { ConventionCategory, SkillType } from '@devdigest/shared';
 import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
 import { NotFoundError } from '../../platform/errors.js';
@@ -20,7 +20,7 @@ import { ConventionsService } from './service.js';
 const UpdateConventionBody = z
   .object({
     rule: z.string().min(1).optional(),
-    category: z.string().nullable().optional(),
+    category: ConventionCategory.nullable().optional(),
     accepted: z.boolean().optional(),
     rejected: z.boolean().optional(),
   })

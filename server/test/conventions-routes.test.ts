@@ -60,4 +60,20 @@ describe('conventions routes (no DB)', () => {
     expect(res.statusCode).toBe(422);
     await app.close();
   });
+
+  it('PATCH /conventions/:id → 422 when category is a string but not one of the known values', async () => {
+    // category is constrained to the shared ConventionCategory enum, same as
+    // the extraction pipeline's LLM-output validation — a plain z.string()
+    // here would let an arbitrary value (e.g. a typo) persist silently,
+    // since the client only renders badges for the known enum values.
+    const app = await buildApp({ config });
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/conventions/11111111-1111-1111-1111-111111111111',
+      payload: { category: 'not-a-real-category' },
+    });
+    expect(res.statusCode).toBe(422);
+    expect(res.json().error.code).toBe('validation_error');
+    await app.close();
+  });
 });

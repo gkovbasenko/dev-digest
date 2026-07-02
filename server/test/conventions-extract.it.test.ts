@@ -383,6 +383,122 @@ d('Conventions extraction lifecycle (POST extract / GET / PATCH / POST bundle)',
     await app.close();
   });
 
+  it('flipping the other direction (rejected -> accepted) clears rejected_at symmetrically', async () => {
+    // The existing mutual-exclusivity test only flips accepted -> rejected;
+    // the guard logic is written symmetrically but the reverse direction was
+    // never itself exercised.
+    const { repoId } = await makeRepoWithSamples();
+    const app = await makeApp([VALID_CANDIDATE]);
+
+    const extracted = await app.inject({
+      method: 'POST',
+      url: `/repos/${repoId}/conventions/extract`,
+    });
+    const candidateId = extracted.json()[0].id;
+
+    await app.inject({
+      method: 'PATCH',
+      url: `/conventions/${candidateId}`,
+      payload: { rejected: true },
+    });
+    const flipped = await app.inject({
+      method: 'PATCH',
+      url: `/conventions/${candidateId}`,
+      payload: { accepted: true },
+    });
+    expect(flipped.json().accepted).toBe(true);
+    expect(flipped.json().rejected).toBe(false);
+
+    await app.close();
+  });
+
+  it('PATCH { accepted: false } / { rejected: false } un-sets the respective timestamp', async () => {
+    // The API supports explicit un-accept/un-reject (accepted_at/rejected_at
+    // -> null) even though the current UI never sends `false` for either —
+    // both Accept/Reject buttons only ever send `true`.
+    const { repoId } = await makeRepoWithSamples();
+    const app = await makeApp([VALID_CANDIDATE]);
+
+    const extracted = await app.inject({
+      method: 'POST',
+      url: `/repos/${repoId}/conventions/extract`,
+    });
+    const candidateId = extracted.json()[0].id;
+
+    await app.inject({
+      method: 'PATCH',
+      url: `/conventions/${candidateId}`,
+      payload: { accepted: true },
+    });
+    const unaccepted = await app.inject({
+      method: 'PATCH',
+      url: `/conventions/${candidateId}`,
+      payload: { accepted: false },
+    });
+    expect(unaccepted.json().accepted).toBe(false);
+    expect(unaccepted.json().rejected).toBe(false);
+
+    await app.inject({
+      method: 'PATCH',
+      url: `/conventions/${candidateId}`,
+      payload: { rejected: true },
+    });
+    const unrejected = await app.inject({
+      method: 'PATCH',
+      url: `/conventions/${candidateId}`,
+      payload: { rejected: false },
+    });
+    expect(unrejected.json().rejected).toBe(false);
+    expect(unrejected.json().accepted).toBe(false);
+
+    await app.close();
+  });
+
+  it('PATCH /conventions/:id → 404 for a well-formed but nonexistent id', async () => {
+    const app = await makeApp([]);
+    const res = await app.inject({
+      method: 'PATCH',
+      url: '/conventions/00000000-0000-0000-0000-000000000000',
+      payload: { accepted: true },
+    });
+    expect(res.statusCode).toBe(404);
+    expect(res.json().error.code).toBe('not_found');
+    await app.close();
+  });
+
+  it('POST /repos/:id/conventions/extract → the LLM call failing surfaces as a clean error response, not a hang or crash', async () => {
+    // completeStructured has no try/catch around it in extract() — an LLM
+    // failure (here: the model's output doesn't match the structured-output
+    // schema, a realistic failure mode) propagates uncaught through the
+    // service and route straight to Fastify's centralized error handler.
+    const { repoId } = await makeRepoWithSamples();
+    const config = loadConfig({ ...process.env, NODE_ENV: 'test' } as NodeJS.ProcessEnv);
+    const app = await buildApp({
+      config,
+      db: pg.handle.db,
+      overrides: {
+        git: new MockGitClient(),
+        github: new MockGitHubClient(),
+        // Deliberately malformed: `candidates` must be an array per
+        // RawCandidates — this fails schema validation inside
+        // MockLLMProvider.completeStructured, which throws.
+        llm: {
+          openai: new MockLLMProvider('openai', {
+            structured: { candidates: 'not-an-array' },
+          }),
+        },
+      },
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/repos/${repoId}/conventions/extract`,
+    });
+    expect(res.statusCode).toBe(500);
+
+    await app.close();
+  });
+
   it('POST /repos/:id/conventions/extract → validation error when the repo is not cloned', async () => {
     const [repo] = await pg.handle.db
       .insert(t.repos)

@@ -107,6 +107,23 @@ describe("ConventionCandidateCard", () => {
       expect(link.closest("button")).toBeInTheDocument();
     });
 
+    it("renders evidence_path as a real link to GitHub when repoFullName/defaultBranch are provided", () => {
+      render(
+        <ConventionCandidateCard
+          c={CANDIDATE}
+          onAction={() => {}}
+          repoFullName="acme/payments-api"
+          defaultBranch="main"
+        />,
+      );
+      const link = screen.getByText(CANDIDATE.evidence_path!).closest("a");
+      expect(link).toBeInTheDocument();
+      expect(link).toHaveAttribute(
+        "href",
+        "https://github.com/acme/payments-api/blob/main/src/modules/foo/service.ts",
+      );
+    });
+
     it("renders without a snippet block when evidence_snippet is null", () => {
       const { container } = render(
         <ConventionCandidateCard c={{ ...CANDIDATE, evidence_snippet: null }} onAction={() => {}} />,

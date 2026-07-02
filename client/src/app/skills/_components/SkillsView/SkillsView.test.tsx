@@ -2,12 +2,20 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import type { Skill } from "@devdigest/shared";
 
-const { mockRouterReplace, mockSearchParams, mockSkills, mockIsLoading, mockSelectedSkill } = vi.hoisted(() => ({
+const {
+  mockRouterReplace,
+  mockSearchParams,
+  mockSkills,
+  mockIsLoading,
+  mockSelectedSkill,
+  mockDeleteSkillMutate,
+} = vi.hoisted(() => ({
   mockRouterReplace: vi.fn(),
   mockSearchParams: { current: new URLSearchParams() },
   mockSkills: { current: [] as Skill[] },
   mockIsLoading: { current: false },
   mockSelectedSkill: { current: undefined as Skill | undefined },
+  mockDeleteSkillMutate: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -22,6 +30,7 @@ vi.mock("../../../../lib/hooks/skills", () => ({
   useSkills: () => ({ data: mockSkills.current, isLoading: mockIsLoading.current }),
   useSkill: () => ({ data: mockSelectedSkill.current }),
   useUpdateSkill: () => ({ mutate: vi.fn(), isPending: false }),
+  useDeleteSkill: () => ({ mutate: mockDeleteSkillMutate, isPending: false }),
   useImportSkill: () => ({ mutate: vi.fn(), isPending: false }),
   useCreateSkill: () => ({ mutate: vi.fn(), isPending: false }),
 }));
@@ -43,6 +52,7 @@ afterEach(() => {
   mockSkills.current = [];
   mockIsLoading.current = false;
   mockSelectedSkill.current = undefined;
+  mockDeleteSkillMutate.mockReset();
 });
 
 const SKILL_A: Skill = {
@@ -95,6 +105,25 @@ describe("SkillsView", () => {
     expect(screen.queryByText("Select a skill")).not.toBeInTheDocument();
     // SkillPreview renders the skill name as its heading.
     expect(screen.getByRole("heading", { name: "Skill A" })).toBeInTheDocument();
+  });
+
+  it("deleting the previewed skill clears ?selected= via router.replace", () => {
+    // SkillPreview's own tests cover the confirm/cancel/pending behavior in
+    // isolation — this covers the SkillsView-level wiring: what happens to
+    // the URL selection once SkillPreview's onDeleted actually fires.
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    mockDeleteSkillMutate.mockImplementation((_id, opts) => opts?.onSuccess?.());
+    mockSkills.current = [SKILL_A, SKILL_B];
+    mockSearchParams.current = new URLSearchParams("selected=sk-a");
+    mockSelectedSkill.current = SKILL_A;
+
+    render(<SkillsView />);
+    fireEvent.click(screen.getByRole("button", { name: "Delete skill" }));
+
+    expect(mockDeleteSkillMutate).toHaveBeenCalledWith("sk-a", expect.any(Object));
+    expect(mockRouterReplace).toHaveBeenCalledWith("/skills?");
+
+    confirmSpy.mockRestore();
   });
 
   it("opens the AddSkillDrawer (file tab) from the Add Skill dropdown", () => {

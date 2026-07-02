@@ -1,9 +1,9 @@
 "use client";
 
 import React from "react";
-import { Badge, Markdown, Toggle, Button, FormField, Textarea } from "@devdigest/ui";
+import { Icon, Badge, Markdown, Toggle, Button, FormField, Textarea } from "@devdigest/ui";
 import type { Skill, SkillType } from "@devdigest/shared";
-import { useUpdateSkill } from "../../../../lib/hooks/skills";
+import { useUpdateSkill, useDeleteSkill } from "../../../../lib/hooks/skills";
 import { useToast } from "../../../../lib/toast";
 import { s } from "./styles";
 
@@ -17,14 +17,20 @@ const TYPE_COLORS: Record<SkillType, { color: string; bg: string }> = {
 export function SkillPreview({
   skill,
   onDirtyChange,
+  onDeleted,
 }: {
   skill: Skill;
   /** Reports whether there's an in-progress, unsaved body edit — so the
    *  parent (which owns skill selection) can confirm before switching away
    *  and silently discarding it. */
   onDirtyChange?: (dirty: boolean) => void;
+  /** Called after this skill is successfully deleted, so the parent can
+   *  clear the selection (the skill's own query cache entry is already
+   *  removed by useDeleteSkill, so re-selecting it would just 404). */
+  onDeleted?: () => void;
 }) {
   const update = useUpdateSkill();
+  const del = useDeleteSkill();
   const toast = useToast();
   const [editing, setEditing] = React.useState(false);
   const [body, setBody] = React.useState(skill.body);
@@ -77,6 +83,16 @@ export function SkillPreview({
       },
     );
 
+  const handleDelete = () => {
+    if (!window.confirm(`Delete skill "${skill.name}"? This cannot be undone.`)) return;
+    del.mutate(skill.id, {
+      onSuccess: () => {
+        toast.success(`Skill "${skill.name}" deleted.`);
+        onDeleted?.();
+      },
+    });
+  };
+
   return (
     <div style={s.preview}>
       <div style={s.previewHeader}>
@@ -91,6 +107,22 @@ export function SkillPreview({
             {enabled ? "Enabled" : "Disabled"}
             <Toggle on={enabled} onChange={toggleEnabled} size={16} />
           </label>
+          <button
+            onClick={handleDelete}
+            disabled={del.isPending}
+            title="Delete skill"
+            aria-label="Delete skill"
+            style={{
+              background: "none",
+              border: "none",
+              cursor: del.isPending ? "not-allowed" : "pointer",
+              color: "var(--text-muted)",
+              display: "inline-flex",
+              padding: 4,
+            }}
+          >
+            <Icon.Trash size={14} style={del.isPending ? { animation: "ddspin 1s linear infinite" } : undefined} />
+          </button>
         </div>
       </div>
 

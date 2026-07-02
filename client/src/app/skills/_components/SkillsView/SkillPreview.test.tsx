@@ -2,13 +2,16 @@ import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import type { Skill } from "@devdigest/shared";
 
-const { mockMutate, mockIsPending } = vi.hoisted(() => ({
+const { mockMutate, mockIsPending, mockDeleteMutate, mockDeletePending } = vi.hoisted(() => ({
   mockMutate: vi.fn(),
   mockIsPending: { current: false },
+  mockDeleteMutate: vi.fn(),
+  mockDeletePending: { current: false },
 }));
 
 vi.mock("../../../../lib/hooks/skills", () => ({
   useUpdateSkill: () => ({ mutate: mockMutate, isPending: mockIsPending.current }),
+  useDeleteSkill: () => ({ mutate: mockDeleteMutate, isPending: mockDeletePending.current }),
 }));
 
 vi.mock("../../../../lib/toast", () => ({
@@ -232,5 +235,46 @@ describe("SkillPreview — onDirtyChange", () => {
 
     unmount();
     expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+  });
+});
+
+describe("SkillPreview — delete", () => {
+  beforeEach(() => {
+    mockDeleteMutate.mockReset();
+    mockDeletePending.current = false;
+  });
+
+  it("asks for confirmation, then deletes and calls onDeleted when confirmed", () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    mockDeleteMutate.mockImplementation((_id, opts) => opts?.onSuccess?.());
+    const onDeleted = vi.fn();
+
+    render(<SkillPreview skill={BASE_SKILL} onDeleted={onDeleted} />);
+    fireEvent.click(screen.getByRole("button", { name: "Delete skill" }));
+
+    expect(confirmSpy).toHaveBeenCalledWith('Delete skill "pr-quality-rubric"? This cannot be undone.');
+    expect(mockDeleteMutate).toHaveBeenCalledWith("sk1", expect.any(Object));
+    expect(onDeleted).toHaveBeenCalledOnce();
+
+    confirmSpy.mockRestore();
+  });
+
+  it("does not delete when the confirmation is declined", () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const onDeleted = vi.fn();
+
+    render(<SkillPreview skill={BASE_SKILL} onDeleted={onDeleted} />);
+    fireEvent.click(screen.getByRole("button", { name: "Delete skill" }));
+
+    expect(mockDeleteMutate).not.toHaveBeenCalled();
+    expect(onDeleted).not.toHaveBeenCalled();
+
+    confirmSpy.mockRestore();
+  });
+
+  it("disables the delete button while the delete mutation is pending", () => {
+    mockDeletePending.current = true;
+    render(<SkillPreview skill={BASE_SKILL} />);
+    expect(screen.getByRole("button", { name: "Delete skill" })).toBeDisabled();
   });
 });

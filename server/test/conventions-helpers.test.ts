@@ -52,6 +52,43 @@ describe('verifyEvidence', () => {
     const check = verifyEvidence('', 1, 'anything');
     expect(check.ok).toBe(false);
   });
+
+  it('handles a single-line file without an off-by-one error', () => {
+    expect(verifyEvidence('const x = 1;', 1, 'const x = 1;').ok).toBe(true);
+    expect(verifyEvidence('const x = 1;', 1, 'nonexistent').ok).toBe(false);
+  });
+});
+
+/**
+ * Window-boundary precision for verifyEvidence, using a file large enough
+ * (10 lines, EVIDENCE_WINDOW=3) that lo/hi actually exclude real lines —
+ * the 5-line FILE above never exercises this since EVIDENCE_WINDOW alone
+ * already covers nearly all of it. slice(lo, hi) is a lossless reconstruction
+ * of a contiguous run of complete lines (split('\n') never truncates a
+ * line's content, and join('\n') on a contiguous slice reproduces exactly
+ * that span of the original file) — so this isn't probing for a join
+ * artifact, it's probing that lo/hi are computed and applied correctly.
+ */
+describe('verifyEvidence — window boundary precision', () => {
+  const LONG_FILE = Array.from({ length: 10 }, (_, i) => `line${i}`).join('\n');
+
+  it('accepts a snippet on the last line included in the window (upper bound, inclusive)', () => {
+    // claimed line=1 -> lo=0, hi=4 -> window is 1-indexed lines 1..4 ("line0".."line3")
+    expect(verifyEvidence(LONG_FILE, 1, 'line3').ok).toBe(true);
+  });
+
+  it('rejects a snippet one line past the window (upper bound, exclusive)', () => {
+    expect(verifyEvidence(LONG_FILE, 1, 'line4').ok).toBe(false);
+  });
+
+  it('accepts a snippet on the first line included in the window (lower bound, inclusive)', () => {
+    // claimed line=8 -> lo=4, hi=10 -> window is 1-indexed lines 5..10 ("line4".."line9")
+    expect(verifyEvidence(LONG_FILE, 8, 'line4').ok).toBe(true);
+  });
+
+  it('rejects a snippet one line before the window (lower bound, exclusive)', () => {
+    expect(verifyEvidence(LONG_FILE, 8, 'line3').ok).toBe(false);
+  });
 });
 
 /**

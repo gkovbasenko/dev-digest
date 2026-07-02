@@ -68,6 +68,20 @@ describe('verifyEvidence', () => {
   it('rejects a multi-line snippet that does not appear in the file', () => {
     expect(verifyEvidence(FILE, 2, 'return 1;\nsomething else entirely').ok).toBe(false);
   });
+
+  it('matches single-line snippets in a CRLF file (trailing \\r does not break the substring match)', () => {
+    const crlfFile = FILE.replace(/\n/g, '\r\n');
+    expect(verifyEvidence(crlfFile, 2, 'return 1;').ok).toBe(true);
+  });
+
+  it('matches a multi-line snippet in a CRLF file — this is the case that actually breaks without normalization', () => {
+    // Without normalizing \r\n -> \n first, the reconstructed window text
+    // keeps the \r as part of the prior line ("...\r\nnextline"), but the
+    // LLM's snippet won't contain \r, so a bare '\n' in the needle wouldn't
+    // line up against the CRLF-preserved window text.
+    const crlfFile = FILE.replace(/\n/g, '\r\n');
+    expect(verifyEvidence(crlfFile, 2, '  return 1;\n}').ok).toBe(true);
+  });
 });
 
 /**

@@ -40,6 +40,10 @@ export function BundleSkillModal({
         setDescription(result.description);
         setBody(result.body);
       },
+      // The global mutation-error toast already surfaces the failure — this
+      // just closes the modal, since (unlike a form the user typed into) a
+      // blank bundle-fetch-failed form has nothing recoverable in it.
+      onError: () => onClose(),
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

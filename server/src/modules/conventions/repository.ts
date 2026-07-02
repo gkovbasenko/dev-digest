@@ -79,6 +79,12 @@ export class ConventionsRepository {
           confidence: v.confidence,
         })),
       )
+      // Two concurrent extraction requests can both pass the rejected-rules
+      // filter for the same rule text before either has inserted — the
+      // (workspaceId, repoId, rule) unique index turns that race into a
+      // silent skip instead of a duplicate row. RETURNING then reports only
+      // the rows actually inserted by this call.
+      .onConflictDoNothing()
       .returning();
   }
 

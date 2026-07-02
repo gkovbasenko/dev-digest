@@ -1,4 +1,15 @@
-import { pgTable, uuid, text, jsonb, timestamp, doublePrecision, integer, vector, index } from 'drizzle-orm/pg-core';
+import {
+  pgTable,
+  uuid,
+  text,
+  jsonb,
+  timestamp,
+  doublePrecision,
+  integer,
+  vector,
+  index,
+  uniqueIndex,
+} from 'drizzle-orm/pg-core';
 import { now } from './_shared';
 import { workspaces } from './core';
 import { repos } from './repos';
@@ -51,5 +62,10 @@ export const conventions = pgTable(
     // DESC order) and listRejectedRuleTexts() (workspaceId+repoId equality
     // via the same index prefix) — every ConventionsRepository query.
     wsRepoIdx: index('conventions_ws_repo_created_idx').on(t.workspaceId, t.repoId, t.createdAt),
+    // Two concurrent extraction requests for the same repo can both read an
+    // empty/stale rejected-rules set before either has inserted — without
+    // this, both would insert the same rule text as separate rows. Paired
+    // with .onConflictDoNothing() in ConventionsRepository.insertMany.
+    ruleUq: uniqueIndex('conventions_ws_repo_rule_uq').on(t.workspaceId, t.repoId, t.rule),
   }),
 );

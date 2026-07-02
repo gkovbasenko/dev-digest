@@ -74,6 +74,12 @@ function bundleImmediately() {
   });
 }
 
+function bundleFails() {
+  mockBundleMutate.mockImplementation((_v: undefined, opts?: { onError?: (err: Error) => void }) => {
+    opts?.onError?.(new Error("network error"));
+  });
+}
+
 const AGENT: Agent = {
   id: "ag1",
   name: "PR Reviewer",
@@ -98,6 +104,13 @@ describe("BundleSkillModal", () => {
     // getByDisplayValue normalizes whitespace by default, collapsing this
     // multi-line body to one line — check the textarea's raw value instead.
     expect(container.querySelector("textarea")?.value).toBe(BUNDLE_RESULT.body);
+  });
+
+  it("closes the modal when the bundle fetch fails (nothing recoverable in a blank form; the global toast covers the message)", () => {
+    bundleFails();
+    const onClose = vi.fn();
+    render(<BundleSkillModal repoId="repo1" onClose={onClose} />);
+    expect(onClose).toHaveBeenCalledOnce();
   });
 
   it("shows a 'merged from N accepted conventions' banner when acceptedCount/repoFullName are given", () => {

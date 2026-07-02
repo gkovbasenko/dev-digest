@@ -92,6 +92,13 @@
       "when": 1783014350149,
       "tag": "0012_fat_cassandra_nova",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1783015549270,
+      "tag": "0013_handy_moonstone",
+      "breakpoints": true
     }
   ]
 }

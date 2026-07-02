@@ -1,14 +1,21 @@
 import { resolve, sep } from 'node:path';
 import { wrapUntrusted } from '@devdigest/reviewer-core';
-import type { ChatMessage, ConventionCandidate, ConventionCategory } from '@devdigest/shared';
+import { ConventionCategory, type ChatMessage, type ConventionCandidate } from '@devdigest/shared';
 import type { ConventionRow } from '../../db/rows.js';
 import { EVIDENCE_WINDOW } from './constants.js';
 
 export function toConventionDto(row: ConventionRow): ConventionCandidate {
+  // Both write paths (extraction's LLM-output schema, the PATCH route body)
+  // already validate category against this same enum, so this should never
+  // actually be out-of-enum — safeParse is defense-in-depth against a
+  // future migration/manual edit, so ONE corrupt row degrades to no
+  // category shown instead of a client-side contract-validation failure
+  // that breaks the ENTIRE conventions list for that repo.
+  const parsedCategory = ConventionCategory.nullable().safeParse(row.category);
   return {
     id: row.id,
     rule: row.rule,
-    category: (row.category as ConventionCategory | null) ?? null,
+    category: parsedCategory.success ? parsedCategory.data : null,
     evidence_path: row.evidencePath,
     evidence_snippet: row.evidenceSnippet,
     confidence: row.confidence,
@@ -58,7 +65,11 @@ export interface EvidenceCheck {
  * line numbers, so this searches a small window rather than the exact line.
  */
 export function verifyEvidence(fileContent: string, line: number, snippet: string): EvidenceCheck {
-  const lines = fileContent.split('\n');
+  // Normalize CRLF first — a file with Windows line endings would otherwise
+  // leave a trailing \r baked into every split line, breaking any multi-line
+  // snippet match (the LLM's snippet won't include \r, so a bare '\n' in the
+  // needle wouldn't line up with the reconstructed '\r\n' in the window).
+  const lines = fileContent.replace(/\r\n/g, '\n').split('\n');
   if (!Number.isInteger(line) || line < 1 || line > lines.length) {
     return { ok: false, reason: `line ${line} out of range` };
   }

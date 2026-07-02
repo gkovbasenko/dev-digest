@@ -468,4 +468,48 @@ d('Conventions extraction lifecycle (POST extract / GET / PATCH / POST bundle)',
 
     await app.close();
   });
+
+  it('concurrent extraction requests for the same repo never produce duplicate rows for the same rule', async () => {
+    // Both requests read listRejectedRuleTexts (empty) before either has
+    // inserted, so without the (workspaceId, repoId, rule) unique index +
+    // onConflictDoNothing, both would insert the same rule as separate rows.
+    const { repoId } = await makeRepoWithSamples();
+    const app = await makeApp([VALID_CANDIDATE]);
+
+    const [first, second] = await Promise.all([
+      app.inject({ method: 'POST', url: `/repos/${repoId}/conventions/extract` }),
+      app.inject({ method: 'POST', url: `/repos/${repoId}/conventions/extract` }),
+    ]);
+    expect(first.statusCode).toBe(201);
+    expect(second.statusCode).toBe(201);
+    // Exactly one of the two concurrent inserts wins the race; the other's
+    // RETURNING set is empty (skipped via onConflictDoNothing), not an error.
+    expect(first.json().length + second.json().length).toBe(1);
+
+    const list = await app.inject({ method: 'GET', url: `/repos/${repoId}/conventions` });
+    expect(list.json()).toHaveLength(1);
+
+    await app.close();
+  });
+
+  it('GET /repos/:id/conventions → a row with an out-of-enum category (e.g. from a manual DB edit) degrades to null instead of crashing the list', async () => {
+    const { repoId } = await makeRepoWithSamples();
+    // Both application write paths (extraction, PATCH) validate category
+    // against the enum — this bypasses that entirely to simulate the only
+    // way an invalid value could actually land here.
+    await pg.handle.db.insert(t.conventions).values({
+      workspaceId,
+      repoId,
+      rule: 'A rule with a corrupted category',
+      category: 'not-a-real-category',
+    });
+
+    const app = await makeApp([]);
+    const res = await app.inject({ method: 'GET', url: `/repos/${repoId}/conventions` });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toHaveLength(1);
+    expect(res.json()[0].category).toBeNull();
+
+    await app.close();
+  });
 });

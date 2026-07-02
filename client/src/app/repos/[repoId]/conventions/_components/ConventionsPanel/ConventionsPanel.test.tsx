@@ -38,8 +38,16 @@ vi.mock("@/lib/hooks/conventions", () => ({
 }));
 
 vi.mock("../BundleSkillModal", () => ({
-  BundleSkillModal: ({ onClose }: { onClose: () => void }) => (
-    <div data-testid="bundle-modal">
+  BundleSkillModal: ({
+    onClose,
+    acceptedCount,
+    repoFullName,
+  }: {
+    onClose: () => void;
+    acceptedCount?: number;
+    repoFullName?: string | null;
+  }) => (
+    <div data-testid="bundle-modal" data-accepted-count={acceptedCount} data-repo-full-name={repoFullName ?? ""}>
       <button onClick={onClose}>close-bundle-modal</button>
     </div>
   ),
@@ -122,6 +130,20 @@ describe("ConventionsPanel", () => {
     expect(btn).not.toBeDisabled();
     fireEvent.click(btn);
     expect(screen.getByTestId("bundle-modal")).toBeInTheDocument();
+  });
+
+  it("forwards the accepted count and repoFullName to BundleSkillModal", () => {
+    mockConventions.current = [
+      { ...CANDIDATE, accepted: true },
+      { ...CANDIDATE, id: "c2", accepted: true },
+      { ...CANDIDATE, id: "c3", accepted: false },
+    ];
+    render(<ConventionsPanel repoId="repo1" repoFullName="acme/payments-api" />);
+    fireEvent.click(screen.getByText("Create skill from accepted"));
+
+    const modal = screen.getByTestId("bundle-modal");
+    expect(modal.dataset.acceptedCount).toBe("2");
+    expect(modal.dataset.repoFullName).toBe("acme/payments-api");
   });
 
   it("forwards a card action to the convention-action mutation", () => {

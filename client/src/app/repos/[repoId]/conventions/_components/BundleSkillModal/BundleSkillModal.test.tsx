@@ -130,6 +130,24 @@ describe("BundleSkillModal", () => {
     ).toBeInTheDocument();
   });
 
+  it("uses singular 'convention' (not 'conventions') when acceptedCount is exactly 1", () => {
+    bundleImmediately();
+    render(
+      <BundleSkillModal
+        repoId="repo1"
+        repoFullName="acme/payments-api"
+        acceptedCount={1}
+        onClose={() => {}}
+      />,
+    );
+    expect(
+      screen.getByText(
+        "Merged from 1 accepted convention in acme/payments-api. Everything below is editable before you save.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/1 accepted conventions/)).not.toBeInTheDocument();
+  });
+
   it("omits the banner when acceptedCount is not provided", () => {
     bundleImmediately();
     render(<BundleSkillModal repoId="repo1" onClose={() => {}} />);

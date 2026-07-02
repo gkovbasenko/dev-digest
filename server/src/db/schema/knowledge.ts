@@ -28,19 +28,28 @@ export const memory = pgTable(
   (t) => ({ wsIdx: index('memory_ws_idx').on(t.workspaceId) }),
 );
 
-export const conventions = pgTable('conventions', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  workspaceId: uuid('workspace_id')
-    .notNull()
-    .references(() => workspaces.id, { onDelete: 'cascade' }),
-  repoId: uuid('repo_id').references(() => repos.id, { onDelete: 'cascade' }),
-  rule: text('rule').notNull(),
-  category: text('category'),
-  evidencePath: text('evidence_path'),
-  evidenceSnippet: text('evidence_snippet'),
-  evidenceLine: integer('evidence_line'),
-  confidence: doublePrecision('confidence'),
-  acceptedAt: timestamp('accepted_at', { withTimezone: true }),
-  rejectedAt: timestamp('rejected_at', { withTimezone: true }),
-  createdAt: now(),
-});
+export const conventions = pgTable(
+  'conventions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    repoId: uuid('repo_id').references(() => repos.id, { onDelete: 'cascade' }),
+    rule: text('rule').notNull(),
+    category: text('category'),
+    evidencePath: text('evidence_path'),
+    evidenceSnippet: text('evidence_snippet'),
+    evidenceLine: integer('evidence_line'),
+    confidence: doublePrecision('confidence'),
+    acceptedAt: timestamp('accepted_at', { withTimezone: true }),
+    rejectedAt: timestamp('rejected_at', { withTimezone: true }),
+    createdAt: now(),
+  },
+  (t) => ({
+    // Covers list()/listAccepted() (workspaceId+repoId equality, createdAt
+    // DESC order) and listRejectedRuleTexts() (workspaceId+repoId equality
+    // via the same index prefix) — every ConventionsRepository query.
+    wsRepoIdx: index('conventions_ws_repo_created_idx').on(t.workspaceId, t.repoId, t.createdAt),
+  }),
+);

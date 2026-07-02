@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { sep, join } from 'node:path';
 import { mkdtemp, mkdir, writeFile, symlink, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { verifyEvidence, resolveClonePath } from '../src/modules/conventions/helpers.js';
+import { verifyEvidence, resolveClonePath, isWithinRoot } from '../src/modules/conventions/helpers.js';
 import { resolveRealClonePath } from '../src/modules/conventions/service.js';
 
 /**
@@ -90,6 +90,50 @@ describe('resolveClonePath', () => {
 
   it('allows the clone root itself (e.g. a "." path)', () => {
     expect(resolveClonePath(CLONE, '.')).toBe(CLONE);
+  });
+});
+
+/**
+ * Direct unit coverage for isWithinRoot — resolveClonePath/resolveRealClonePath
+ * both call it with already-normalized (resolve()/realpath()) inputs, which
+ * never carry a trailing separator, so this exercises it in isolation
+ * including the input shape its two current callers never actually produce.
+ */
+describe('isWithinRoot', () => {
+  const ROOT = '/tmp/dd-clones/acme-repo';
+
+  it('is true when the candidate equals the root exactly', () => {
+    expect(isWithinRoot(ROOT, ROOT)).toBe(true);
+  });
+
+  it('is true when the candidate is nested under the root', () => {
+    expect(isWithinRoot(ROOT, `${ROOT}${sep}src${sep}foo.ts`)).toBe(true);
+  });
+
+  it('is false when the candidate is a sibling that shares the root as a string prefix', () => {
+    expect(isWithinRoot(ROOT, `${ROOT}-evil${sep}secret.env`)).toBe(false);
+  });
+
+  it('is false when the candidate is a parent of the root', () => {
+    expect(isWithinRoot(ROOT, '/tmp/dd-clones')).toBe(false);
+  });
+
+  it('still matches correctly when root is passed with a trailing separator', () => {
+    // Neither resolve() nor realpath() ever produce this shape for a real
+    // directory, but isWithinRoot normalizes defensively — root + sep would
+    // otherwise double up ("/a/b/" + sep = "/a/b//"), which no real resolved
+    // path starts with, silently rejecting everything.
+    const trailing = `${ROOT}${sep}`;
+    expect(isWithinRoot(trailing, `${ROOT}${sep}src${sep}foo.ts`)).toBe(true);
+    expect(isWithinRoot(trailing, trailing)).toBe(true);
+  });
+
+  it('does not collapse a trailing-separator-only root ("/") to an empty-string bypass', () => {
+    // A naive strip-trailing-sep would turn root="/" into "", and
+    // "".startsWith("/") would then be true for every absolute path —
+    // a complete containment bypass. Guard against that specific collapse.
+    expect(isWithinRoot(sep, `${sep}etc${sep}passwd`)).toBe(false);
+    expect(isWithinRoot(sep, sep)).toBe(true);
   });
 });
 

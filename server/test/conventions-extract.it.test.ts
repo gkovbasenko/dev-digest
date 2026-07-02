@@ -319,6 +319,44 @@ d('Conventions extraction lifecycle (POST extract / GET / PATCH / POST bundle)',
     await app.close();
   });
 
+  it('re-extraction filters a rejected rule even when whitespace/case differ from the original', async () => {
+    // Both service.ts (`c.rule.trim().toLowerCase()`) and repository.ts's
+    // listRejectedRuleTexts normalize the same way before comparing — a test
+    // that only ever resubmits byte-identical rule text can't tell that
+    // normalization from plain string equality; a regression that drops
+    // .toLowerCase() on one side but not the other would pass it silently.
+    const { repoId } = await makeRepoWithSamples();
+
+    const firstApp = await makeApp([VALID_CANDIDATE]);
+    const first = await firstApp.inject({
+      method: 'POST',
+      url: `/repos/${repoId}/conventions/extract`,
+    });
+    const candidateId = first.json()[0].id;
+    await firstApp.inject({
+      method: 'PATCH',
+      url: `/conventions/${candidateId}`,
+      payload: { rejected: true },
+    });
+    await firstApp.close();
+
+    const variantCandidate = {
+      ...VALID_CANDIDATE,
+      rule: `  ${VALID_CANDIDATE.rule.toUpperCase()}  `,
+    };
+    const secondApp = await makeApp([variantCandidate]);
+    const second = await secondApp.inject({
+      method: 'POST',
+      url: `/repos/${repoId}/conventions/extract`,
+    });
+    expect(second.statusCode).toBe(201);
+    expect(second.json()).toHaveLength(0);
+
+    const list = await secondApp.inject({ method: 'GET', url: `/repos/${repoId}/conventions` });
+    expect(list.json()).toHaveLength(1); // still just the one rejected row, no duplicate
+    await secondApp.close();
+  });
+
   it('accepted and rejected are mutually exclusive', async () => {
     const { repoId } = await makeRepoWithSamples();
     const app = await makeApp([VALID_CANDIDATE]);

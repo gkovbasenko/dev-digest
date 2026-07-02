@@ -17,9 +17,17 @@ export function toConventionDto(row: ConventionRow): ConventionCandidate {
   };
 }
 
-/** Is `candidate` equal to `root`, or nested inside it? Both must already be resolved/absolute. */
+/**
+ * Is `candidate` equal to `root`, or nested inside it? Both should already be
+ * resolved/absolute (via `resolve()`/`realpath()`, which never leave a
+ * trailing separator except for the filesystem root itself) — a trailing
+ * separator on `root` is stripped defensively anyway, since `candidate`
+ * matching `root + sep` would otherwise double up (`/a/b/` + sep = `/a/b//`,
+ * which no real resolved path starts with) and wrongly reject everything.
+ */
 export function isWithinRoot(root: string, candidate: string): boolean {
-  return candidate === root || candidate.startsWith(root + sep);
+  const normalizedRoot = root.length > sep.length && root.endsWith(sep) ? root.slice(0, -sep.length) : root;
+  return candidate === normalizedRoot || candidate.startsWith(normalizedRoot + sep);
 }
 
 /**

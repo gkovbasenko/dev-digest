@@ -5,6 +5,16 @@ Newest first. See `.claude/skills/engineering-insights/SKILL.md` for what belong
 
 ---
 
+## 2026-07-02 — Any LLM-cited file path used in a filesystem read needs an explicit clone-directory containment check, not just `path.join`
+
+`node:path`'s `join()` does NOT sandbox — `join(clonePath, '../../etc/passwd')` happily resolves outside `clonePath`. The conventions-extraction service reads a file at `evidence_path`, a string that comes straight from the LLM's structured output (untrusted: a malicious repo could prompt-inject a traversal path into what the model cites as evidence). Confirmed exploitable with a negative-control test — reverting the fix let a real file planted one directory above the clone get read and its path persisted to the DB via a normal `extract()` call, no auth bypass or malformed request needed.
+
+Fixed with `resolveClonePath(clonePath, file)` in `conventions/helpers.ts`: `path.resolve()` both sides, then require the resolved path to equal the root or start with `root + path.sep` (the trailing separator matters — without it, a sibling dir like `acme-repo-evil` would pass a naive `.startsWith(root)` check since it shares `acme-repo` as a string prefix).
+
+**How to apply:** any future feature where an LLM's structured output names a path that gets read off a local clone (repo-intel, onboarding, future extraction-style features) must run it through this same containment check before the `readFile` — never trust `join()` alone with model-controlled path segments.
+
+**Evidence:** `server/src/modules/conventions/helpers.ts` (`resolveClonePath`), `server/src/modules/conventions/service.ts` (`readCloneFile`), `server/test/conventions-helpers.test.ts` (`resolveClonePath` describe block — includes the sibling-dir-prefix case), `server/test/conventions-extract.it.test.ts` ("drops a candidate whose evidence_path attempts to traverse outside the clone directory" — plants a real file outside the clone and asserts it's never reached).
+
 ## 2026-07-02 — `pnpm db:generate` blocks on an interactive rename-vs-create prompt when a schema diff both adds and drops similarly-named columns in one run
 
 `drizzle-kit generate` is interactive (`@clack/prompts`) whenever its diff is ambiguous — e.g. dropping `conventions.accepted` (boolean) while adding `conventions.category`/`accepted_at` in the same schema edit made it ask "Is `category` created or renamed from `accepted`?" with an arrow-key select menu. This hangs non-interactive shells (CI, this sandbox, piped `echo`/`printf` input — `@clack/prompts` needs a real TTY, not just stdin bytes) with no way to answer it non-interactively.

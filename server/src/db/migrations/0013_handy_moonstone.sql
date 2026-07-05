@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "conventions_ws_repo_rule_uq" ON "conventions" USING btree ("workspace_id","repo_id","rule");

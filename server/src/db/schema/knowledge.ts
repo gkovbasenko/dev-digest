@@ -1,4 +1,15 @@
-import { pgTable, uuid, text, jsonb, timestamp, doublePrecision, boolean, vector, index } from 'drizzle-orm/pg-core';
+import {
+  pgTable,
+  uuid,
+  text,
+  jsonb,
+  timestamp,
+  doublePrecision,
+  integer,
+  vector,
+  index,
+  uniqueIndex,
+} from 'drizzle-orm/pg-core';
 import { now } from './_shared';
 import { workspaces } from './core';
 import { repos } from './repos';
@@ -28,15 +39,33 @@ export const memory = pgTable(
   (t) => ({ wsIdx: index('memory_ws_idx').on(t.workspaceId) }),
 );
 
-export const conventions = pgTable('conventions', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  workspaceId: uuid('workspace_id')
-    .notNull()
-    .references(() => workspaces.id, { onDelete: 'cascade' }),
-  repoId: uuid('repo_id').references(() => repos.id, { onDelete: 'cascade' }),
-  rule: text('rule').notNull(),
-  evidencePath: text('evidence_path'),
-  evidenceSnippet: text('evidence_snippet'),
-  confidence: doublePrecision('confidence'),
-  accepted: boolean('accepted').notNull().default(false),
-});
+export const conventions = pgTable(
+  'conventions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    repoId: uuid('repo_id').references(() => repos.id, { onDelete: 'cascade' }),
+    rule: text('rule').notNull(),
+    category: text('category'),
+    evidencePath: text('evidence_path'),
+    evidenceSnippet: text('evidence_snippet'),
+    evidenceLine: integer('evidence_line'),
+    confidence: doublePrecision('confidence'),
+    acceptedAt: timestamp('accepted_at', { withTimezone: true }),
+    rejectedAt: timestamp('rejected_at', { withTimezone: true }),
+    createdAt: now(),
+  },
+  (t) => ({
+    // Covers list()/listAccepted() (workspaceId+repoId equality, createdAt
+    // DESC order) and listRejectedRuleTexts() (workspaceId+repoId equality
+    // via the same index prefix) — every ConventionsRepository query.
+    wsRepoIdx: index('conventions_ws_repo_created_idx').on(t.workspaceId, t.repoId, t.createdAt),
+    // Two concurrent extraction requests for the same repo can both read an
+    // empty/stale rejected-rules set before either has inserted — without
+    // this, both would insert the same rule text as separate rows. Paired
+    // with .onConflictDoNothing() in ConventionsRepository.insertMany.
+    ruleUq: uniqueIndex('conventions_ws_repo_rule_uq').on(t.workspaceId, t.repoId, t.rule),
+  }),
+);

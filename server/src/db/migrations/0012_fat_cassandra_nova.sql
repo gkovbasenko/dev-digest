@@ -1,0 +1,1 @@
+CREATE INDEX "conventions_ws_repo_created_idx" ON "conventions" USING btree ("workspace_id","repo_id","created_at");

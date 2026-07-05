@@ -2,13 +2,16 @@ import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import type { Skill } from "@devdigest/shared";
 
-const { mockMutate, mockIsPending } = vi.hoisted(() => ({
+const { mockMutate, mockIsPending, mockDeleteMutate, mockDeletePending } = vi.hoisted(() => ({
   mockMutate: vi.fn(),
   mockIsPending: { current: false },
+  mockDeleteMutate: vi.fn(),
+  mockDeletePending: { current: false },
 }));
 
 vi.mock("../../../../lib/hooks/skills", () => ({
   useUpdateSkill: () => ({ mutate: mockMutate, isPending: mockIsPending.current }),
+  useDeleteSkill: () => ({ mutate: mockDeleteMutate, isPending: mockDeletePending.current }),
 }));
 
 vi.mock("../../../../lib/toast", () => ({
@@ -102,27 +105,37 @@ describe("SkillPreview — inline edit/save/cancel", () => {
   });
 
   it("Edit switches to the textarea, seeded with the current body", () => {
-    render(<SkillPreview skill={BASE_SKILL} />);
-    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    const { container } = render(<SkillPreview skill={BASE_SKILL} />);
+    expect(container.querySelector("textarea.mono")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
 
-    expect(screen.getByRole("textbox")).toHaveValue(BASE_SKILL.body);
+    expect(container.querySelector("textarea.mono")).toHaveValue(BASE_SKILL.body);
     expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
   });
 
-  it("Save sends the edited body as the mutation patch", () => {
+  it("Save sends the edited body and description as the mutation patch", () => {
     mockMutate.mockImplementation(() => {});
-    render(<SkillPreview skill={BASE_SKILL} />);
+    const { container } = render(<SkillPreview skill={BASE_SKILL} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
-    fireEvent.change(screen.getByRole("textbox"), { target: { value: "# Rule\nDo the NEW thing." } });
+    fireEvent.change(container.querySelector("textarea.mono")!, {
+      target: { value: "# Rule\nDo the NEW thing." },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     expect(mockMutate).toHaveBeenCalledWith(
-      { id: "sk1", patch: { body: "# Rule\nDo the NEW thing." } },
+      {
+        id: "sk1",
+        patch: {
+          name: BASE_SKILL.name,
+          type: BASE_SKILL.type,
+          body: "# Rule\nDo the NEW thing.",
+          description: BASE_SKILL.description,
+        },
+      },
       expect.any(Object),
     );
   });
@@ -131,41 +144,43 @@ describe("SkillPreview — inline edit/save/cancel", () => {
     mockMutate.mockImplementation((_vars, opts) => {
       opts?.onSuccess?.();
     });
-    render(<SkillPreview skill={BASE_SKILL} />);
+    const { container } = render(<SkillPreview skill={BASE_SKILL} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
-    fireEvent.change(screen.getByRole("textbox"), { target: { value: "# Rule\nDo the NEW thing." } });
+    fireEvent.change(container.querySelector("textarea.mono")!, {
+      target: { value: "# Rule\nDo the NEW thing." },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
-    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(container.querySelector("textarea.mono")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
   });
 
   it("stays in edit mode with the typed body if the save fails (no onSuccess call)", () => {
     mockMutate.mockImplementation(() => {}); // never calls onSuccess — simulates a pending/failed save
-    render(<SkillPreview skill={BASE_SKILL} />);
+    const { container } = render(<SkillPreview skill={BASE_SKILL} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
-    fireEvent.change(screen.getByRole("textbox"), { target: { value: "unsaved edit" } });
+    fireEvent.change(container.querySelector("textarea.mono")!, { target: { value: "unsaved edit" } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
-    expect(screen.getByRole("textbox")).toHaveValue("unsaved edit");
+    expect(container.querySelector("textarea.mono")).toHaveValue("unsaved edit");
   });
 
   it("Cancel reverts to the original body and exits edit mode without mutating", () => {
-    render(<SkillPreview skill={BASE_SKILL} />);
+    const { container } = render(<SkillPreview skill={BASE_SKILL} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
-    fireEvent.change(screen.getByRole("textbox"), { target: { value: "a throwaway edit" } });
+    fireEvent.change(container.querySelector("textarea.mono")!, { target: { value: "a throwaway edit" } });
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
     expect(mockMutate).not.toHaveBeenCalled();
-    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(container.querySelector("textarea.mono")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
 
     // Re-entering edit mode shows the ORIGINAL body, not the discarded edit.
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
-    expect(screen.getByRole("textbox")).toHaveValue(BASE_SKILL.body);
+    expect(container.querySelector("textarea.mono")).toHaveValue(BASE_SKILL.body);
   });
 
   it("disables Save and shows a pending label while the save mutation is in flight", () => {
@@ -178,6 +193,151 @@ describe("SkillPreview — inline edit/save/cancel", () => {
   });
 });
 
+describe("SkillPreview — description", () => {
+  afterEach(() => {
+    mockMutate.mockReset();
+    mockIsPending.current = false;
+  });
+
+  it("shows the skill's description when not editing", () => {
+    render(<SkillPreview skill={BASE_SKILL} />);
+    expect(screen.getByText(BASE_SKILL.description)).toBeInTheDocument();
+  });
+
+  it("shows a muted 'No description' placeholder when the skill has none", () => {
+    render(<SkillPreview skill={{ ...BASE_SKILL, description: "" }} />);
+    expect(screen.getByText("No description")).toBeInTheDocument();
+  });
+
+  it("Edit reveals an editable description field seeded with the current value", () => {
+    render(<SkillPreview skill={BASE_SKILL} />);
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    expect(screen.getByPlaceholderText("What does this skill check?")).toHaveValue(
+      BASE_SKILL.description,
+    );
+  });
+
+  it("Save sends the edited description in the mutation patch", () => {
+    mockMutate.mockImplementation(() => {});
+    render(<SkillPreview skill={BASE_SKILL} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByPlaceholderText("What does this skill check?"), {
+      target: { value: "Updated description" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(mockMutate).toHaveBeenCalledWith(
+      {
+        id: "sk1",
+        patch: {
+          name: BASE_SKILL.name,
+          type: BASE_SKILL.type,
+          body: BASE_SKILL.body,
+          description: "Updated description",
+        },
+      },
+      expect.any(Object),
+    );
+  });
+
+  it("Cancel reverts an edited description without mutating", () => {
+    render(<SkillPreview skill={BASE_SKILL} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByPlaceholderText("What does this skill check?"), {
+      target: { value: "A throwaway edit" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(mockMutate).not.toHaveBeenCalled();
+    expect(screen.getByText(BASE_SKILL.description)).toBeInTheDocument();
+  });
+});
+
+describe("SkillPreview — name and type editing", () => {
+  afterEach(() => {
+    mockMutate.mockReset();
+    mockIsPending.current = false;
+  });
+
+  it("shows the name as a heading and the type as a badge when not editing", () => {
+    render(<SkillPreview skill={BASE_SKILL} />);
+    expect(screen.getByRole("heading", { name: BASE_SKILL.name })).toBeInTheDocument();
+    expect(screen.getByText(BASE_SKILL.type)).toBeInTheDocument();
+  });
+
+  it("Edit reveals editable name/type fields seeded with the current values", () => {
+    render(<SkillPreview skill={BASE_SKILL} />);
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+
+    expect(screen.getByPlaceholderText("Skill name")).toHaveValue(BASE_SKILL.name);
+    expect(screen.getByRole("combobox")).toHaveValue(BASE_SKILL.type);
+  });
+
+  it("Save sends the edited name and type in the mutation patch", () => {
+    mockMutate.mockImplementation(() => {});
+    render(<SkillPreview skill={BASE_SKILL} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByPlaceholderText("Skill name"), {
+      target: { value: "renamed-skill" },
+    });
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "security" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(mockMutate).toHaveBeenCalledWith(
+      {
+        id: "sk1",
+        patch: {
+          name: "renamed-skill",
+          type: "security",
+          body: BASE_SKILL.body,
+          description: BASE_SKILL.description,
+        },
+      },
+      expect.any(Object),
+    );
+  });
+
+  it("trims whitespace from the name before saving", () => {
+    mockMutate.mockImplementation(() => {});
+    render(<SkillPreview skill={BASE_SKILL} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByPlaceholderText("Skill name"), {
+      target: { value: "  padded-name  " },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(mockMutate).toHaveBeenCalledWith(
+      expect.objectContaining({ patch: expect.objectContaining({ name: "padded-name" }) }),
+      expect.any(Object),
+    );
+  });
+
+  it("disables Save when the name is emptied out or whitespace-only", () => {
+    render(<SkillPreview skill={BASE_SKILL} />);
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+
+    fireEvent.change(screen.getByPlaceholderText("Skill name"), { target: { value: "   " } });
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+  });
+
+  it("Cancel reverts an edited name/type without mutating", () => {
+    render(<SkillPreview skill={BASE_SKILL} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByPlaceholderText("Skill name"), { target: { value: "throwaway" } });
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "security" } });
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(mockMutate).not.toHaveBeenCalled();
+    expect(screen.getByRole("heading", { name: BASE_SKILL.name })).toBeInTheDocument();
+    expect(screen.getByText(BASE_SKILL.type)).toBeInTheDocument();
+  });
+});
+
 describe("SkillPreview — onDirtyChange", () => {
   beforeEach(() => {
     mockMutate.mockReset();
@@ -186,23 +346,34 @@ describe("SkillPreview — onDirtyChange", () => {
 
   it("reports dirty only once editing AND the body actually differs from the saved value", () => {
     const onDirtyChange = vi.fn();
-    render(<SkillPreview skill={BASE_SKILL} onDirtyChange={onDirtyChange} />);
+    const { container } = render(<SkillPreview skill={BASE_SKILL} onDirtyChange={onDirtyChange} />);
     expect(onDirtyChange).toHaveBeenLastCalledWith(false);
 
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
     // Entering edit mode alone isn't dirty — the body hasn't changed yet.
     expect(onDirtyChange).toHaveBeenLastCalledWith(false);
 
-    fireEvent.change(screen.getByRole("textbox"), { target: { value: "edited body" } });
+    fireEvent.change(container.querySelector("textarea.mono")!, { target: { value: "edited body" } });
+    expect(onDirtyChange).toHaveBeenLastCalledWith(true);
+  });
+
+  it("reports dirty when only the description changes (body untouched)", () => {
+    const onDirtyChange = vi.fn();
+    render(<SkillPreview skill={BASE_SKILL} onDirtyChange={onDirtyChange} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByPlaceholderText("What does this skill check?"), {
+      target: { value: "A new description" },
+    });
     expect(onDirtyChange).toHaveBeenLastCalledWith(true);
   });
 
   it("reports not-dirty again after Cancel", () => {
     const onDirtyChange = vi.fn();
-    render(<SkillPreview skill={BASE_SKILL} onDirtyChange={onDirtyChange} />);
+    const { container } = render(<SkillPreview skill={BASE_SKILL} onDirtyChange={onDirtyChange} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
-    fireEvent.change(screen.getByRole("textbox"), { target: { value: "edited body" } });
+    fireEvent.change(container.querySelector("textarea.mono")!, { target: { value: "edited body" } });
     expect(onDirtyChange).toHaveBeenLastCalledWith(true);
 
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
@@ -212,10 +383,10 @@ describe("SkillPreview — onDirtyChange", () => {
   it("reports not-dirty again after a successful save", () => {
     mockMutate.mockImplementation((_vars, opts) => opts?.onSuccess?.());
     const onDirtyChange = vi.fn();
-    render(<SkillPreview skill={BASE_SKILL} onDirtyChange={onDirtyChange} />);
+    const { container } = render(<SkillPreview skill={BASE_SKILL} onDirtyChange={onDirtyChange} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
-    fireEvent.change(screen.getByRole("textbox"), { target: { value: "edited body" } });
+    fireEvent.change(container.querySelector("textarea.mono")!, { target: { value: "edited body" } });
     expect(onDirtyChange).toHaveBeenLastCalledWith(true);
 
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -224,13 +395,56 @@ describe("SkillPreview — onDirtyChange", () => {
 
   it("reports not-dirty on unmount (so a stale dirty flag can't leak into the next selection)", () => {
     const onDirtyChange = vi.fn();
-    const { unmount } = render(<SkillPreview skill={BASE_SKILL} onDirtyChange={onDirtyChange} />);
+    const { container, unmount } = render(
+      <SkillPreview skill={BASE_SKILL} onDirtyChange={onDirtyChange} />,
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
-    fireEvent.change(screen.getByRole("textbox"), { target: { value: "edited body" } });
+    fireEvent.change(container.querySelector("textarea.mono")!, { target: { value: "edited body" } });
     expect(onDirtyChange).toHaveBeenLastCalledWith(true);
 
     unmount();
     expect(onDirtyChange).toHaveBeenLastCalledWith(false);
+  });
+});
+
+describe("SkillPreview — delete", () => {
+  beforeEach(() => {
+    mockDeleteMutate.mockReset();
+    mockDeletePending.current = false;
+  });
+
+  it("asks for confirmation, then deletes and calls onDeleted when confirmed", () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    mockDeleteMutate.mockImplementation((_id, opts) => opts?.onSuccess?.());
+    const onDeleted = vi.fn();
+
+    render(<SkillPreview skill={BASE_SKILL} onDeleted={onDeleted} />);
+    fireEvent.click(screen.getByRole("button", { name: "Delete skill" }));
+
+    expect(confirmSpy).toHaveBeenCalledWith('Delete skill "pr-quality-rubric"? This cannot be undone.');
+    expect(mockDeleteMutate).toHaveBeenCalledWith("sk1", expect.any(Object));
+    expect(onDeleted).toHaveBeenCalledOnce();
+
+    confirmSpy.mockRestore();
+  });
+
+  it("does not delete when the confirmation is declined", () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const onDeleted = vi.fn();
+
+    render(<SkillPreview skill={BASE_SKILL} onDeleted={onDeleted} />);
+    fireEvent.click(screen.getByRole("button", { name: "Delete skill" }));
+
+    expect(mockDeleteMutate).not.toHaveBeenCalled();
+    expect(onDeleted).not.toHaveBeenCalled();
+
+    confirmSpy.mockRestore();
+  });
+
+  it("disables the delete button while the delete mutation is pending", () => {
+    mockDeletePending.current = true;
+    render(<SkillPreview skill={BASE_SKILL} />);
+    expect(screen.getByRole("button", { name: "Delete skill" })).toBeDisabled();
   });
 });

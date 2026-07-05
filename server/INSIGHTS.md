@@ -5,6 +5,26 @@ Newest first. See `.claude/skills/engineering-insights/SKILL.md` for what belong
 
 ---
 
+## 2026-07-02 — A clone-directory containment check needs BOTH a syntactic path check AND a `realpath`-based symlink check — one alone is not enough
+
+`node:path`'s `join()`/`resolve()` do NOT sandbox — `resolve(clonePath, '../../etc/passwd')` happily resolves outside `clonePath`. First fix: `resolveClonePath(clonePath, file)` in `conventions/helpers.ts` does `path.resolve()` on both sides and requires the result to equal the root or start with `root + path.sep` (trailing separator matters — without it, a sibling dir like `acme-repo-evil` passes a naive `.startsWith(root)` check since it shares `acme-repo` as a string prefix). That closed `../`-style traversal in `evidence_path`, the LLM's untrusted structured-output field.
+
+But that check is **purely syntactic** — no filesystem access — so it cannot catch a **symlink** committed inside the clone that points outside it. Git supports committing symlinks (mode 120000); `git clone`/checkout materializes them as real filesystem symlinks. This is worse than the `evidence_path` case: `readSampled()` reads every `CONFIG_FILE_CANDIDATES` filename (`tsconfig.json`, `.eslintrc.json`, ...) **unconditionally** while building the extraction prompt — no LLM cooperation, no `evidence_path` involved at all. A malicious repo shipping `tsconfig.json` as a symlink to a `.env` file would have had that file's content read and shipped straight into a third-party LLM API call, just from adding the repo and running one extraction.
+
+Fixed with `resolveRealClonePath` in `service.ts`: after the syntactic check, `realpath()` both the clone root and the resolved path (resolves every symlink in the chain to its true target) and re-checks containment against the **real** paths. This is the actual read boundary — `resolveClonePath` alone is necessary but not sufficient.
+
+**How to apply:** any containment check that gates a filesystem read must realpath before the final containment comparison, not just resolve the string. A syntactic-only check (`path.resolve` + `startsWith`) stops `../` and absolute-path tricks but not symlinks — both negative-control tests (traversal AND symlink) must pass before calling a path-containment fix complete.
+
+**Evidence:** `server/src/modules/conventions/helpers.ts` (`resolveClonePath`, `isWithinRoot`), `server/src/modules/conventions/service.ts` (`resolveRealClonePath`, `readCloneFile`), `server/test/conventions-helpers.test.ts` (`resolveRealClonePath` describe block — symlinked file, symlinked directory), `server/test/conventions-extract.it.test.ts` ("drops a candidate whose evidence_path is a symlink escaping the clone directory", "never sends a symlinked config file's off-clone content to the LLM" — asserts on `MockLLMProvider.calls`, the second confirmed exploitable via negative control before the second fix landed).
+
+## 2026-07-02 — `pnpm db:generate` blocks on an interactive rename-vs-create prompt when a schema diff both adds and drops similarly-named columns in one run
+
+`drizzle-kit generate` is interactive (`@clack/prompts`) whenever its diff is ambiguous — e.g. dropping `conventions.accepted` (boolean) while adding `conventions.category`/`accepted_at` in the same schema edit made it ask "Is `category` created or renamed from `accepted`?" with an arrow-key select menu. This hangs non-interactive shells (CI, this sandbox, piped `echo`/`printf` input — `@clack/prompts` needs a real TTY, not just stdin bytes) with no way to answer it non-interactively.
+
+**How to apply:** split the schema edit into two purely-additive `pnpm db:generate` runs instead of one mixed add+drop edit: (1) add all new columns while temporarily keeping the old one, generate — a pure `ADD COLUMN` diff has no ambiguity and never prompts; (2) remove the old column from the schema, generate again — a pure `DROP COLUMN` diff is equally unambiguous. Two small generated migrations beat fighting the prompt.
+
+**Evidence:** `server/src/db/migrations/0010_wandering_may_parker.sql` (additive: `category`/`evidence_line`/`accepted_at`/`rejected_at`/`created_at`), `0011_fuzzy_malice.sql` (`DROP COLUMN accepted`) — the single-pass attempt reproduced with `pnpm db:generate` prompting `Is category column in conventions table created or renamed from another column?`.
+
 ## 2026-07-02 — There is no multi-user auth yet; "missing workspace membership check" findings on repository methods are false positives
 
 `getContext()` (`modules/_shared/context.ts`) resolves `{ workspaceId, userId }` via `container.auth`, and the only `AuthProvider` today is `LocalNoAuthProvider` (`adapters/auth/local.ts`) — explicit MVP no-login mode. Its `currentWorkspace()`/`currentUser()` either return the single seeded workspace/user (real DB-backed UUIDs) or **throw** (`if (!w) throw new Error(...)`); they never return `undefined`/`null`/empty-string, and `Promise<AuthWorkspace>` types `id: string` as non-optional. Every route in every module derives `workspaceId` exclusively from `getContext()` — never from a URL param, header, or body — so there is no user-controlled input path to a wrong or missing `workspaceId` either.

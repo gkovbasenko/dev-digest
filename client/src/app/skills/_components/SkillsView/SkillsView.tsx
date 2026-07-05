@@ -113,6 +113,7 @@ export function SkillsView() {
               onDirtyChange={(dirty) => {
                 isDirtyRef.current = dirty;
               }}
+              onDeleted={() => setSelected(null)}
             />
           ) : (
             <EmptyState

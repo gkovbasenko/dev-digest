@@ -121,7 +121,7 @@ export type SkillSource = z.infer<typeof SkillSource>;
 export const Skill = z.object({
   id: z.string(),
   name: z.string(),
-  description: z.string(),
+  desc: z.string(),
   type: SkillType,
   source: SkillSource,
   body: z.string(),

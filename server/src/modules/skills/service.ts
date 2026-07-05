@@ -31,7 +31,7 @@ function toSkillDto(row: SkillRow): Skill {
   return {
     id: row.id,
     name: row.name,
-    description: row.description,
+    desc: row.description,
     type: row.type as SkillType,
     source: row.source as SkillSource,
     body: row.body,

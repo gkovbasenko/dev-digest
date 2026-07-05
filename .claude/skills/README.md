@@ -16,6 +16,7 @@ Reusable AI skills that provide specialized knowledge and workflows. Canonical l
 | [zod](zod/SKILL.md) | Full-stack | Zod schema validation, parsing, error handling, type inference |
 | [typescript-expert](typescript-expert/SKILL.md) | Full-stack | Type-level programming, performance, tooling, migrations |
 | [security](security/SKILL.md) | Full-stack | OWASP Top 10:2025, auth, injection, uploads, secrets |
+| [architecture-patterns](architecture-patterns/SKILL.md) | Backend | Clean / Hexagonal / DDD, module boundaries, dependency rules (backend-oriented) |
 | [mermaid-diagram](mermaid-diagram/SKILL.md) | Shared | Mermaid diagrams in markdown (flowcharts, sequence, ERD, …) |
 | [ui-architecture](ui-architecture/SKILL.md) | Frontend | client/ file placement, component folder anatomy, data-fetching flow, naming, vendor UI, tests |
 | [pr-self-review](pr-self-review/SKILL.md) | Workflow | Pre-done quality gate: routes diff by surface to ui-architecture / server-architecture + stack skills |

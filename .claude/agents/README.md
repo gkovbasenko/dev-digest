@@ -8,13 +8,14 @@ Project-level Claude Code subagents, committed to the repo as shared team specia
 |-------|-------|-------|---------|
 | [planner](planner.md) | opus | Read, Grep, Glob, Bash, Skill | Read-only. Produces a structured **Development Plan** — decomposes work into parallelizable, skill-tagged tasks. Never writes code. |
 | [implementer](implementer.md) | sonnet | Read, Edit, Write, Bash, Grep, Glob, Skill | Executes **one** scoped plan task (backend or UI), loads the right skill set for its module, self-verifies via typecheck + existing tests, reviews only its own diff. |
-| [researcher](researcher.md) | sonnet | Read, Grep, Glob, Bash, WebSearch, WebFetch | Read-only. Finds and verifies information in the codebase or on the internet; never edits. |
+| [researcher](researcher.md) | sonnet | Read, Grep, Glob, Bash | Read-only. Finds/verifies information in the codebase; no web access; never edits. |
+| [web-researcher](web-researcher.md) | sonnet | WebSearch, WebFetch | Read-only. Finds/verifies information on the internet, with links; no filesystem access. |
 | [test-writer](test-writer.md) | sonnet | Read, Edit, Write, Bash, Grep, Glob, Skill | Writes automated tests (backend or UI), one module per run, in parallel; iterates until the suite is green. |
 | [architecture-reviewer](architecture-reviewer.md) | opus | Read, Grep, Glob, Bash, Skill | Read-only. Reviews architecture — boundaries, dependency direction, coupling — high-signal findings only. |
 | [plan-verifier](plan-verifier.md) | opus | Read, Grep, Glob, Bash, Skill | Read-only. Verifies a Development Plan's requirements are implemented AND verified; per-requirement PASS/PARTIAL/FAIL. |
 | [doc-writer](doc-writer.md) | sonnet | Read, Edit, Write, Bash, Grep, Glob, Skill | Writes documentation grounded in real code — Diátaxis-typed, placed by destination table, Mermaid for diagrams. |
 
-Typical flow: **researcher** gathers context → **planner** writes the Development Plan → several **implementer** and **test-writer** agents run in parallel over the plan's disjoint tasks → **architecture-reviewer** and **plan-verifier** check the result (quality and requirement-coverage respectively) → **doc-writer** documents it.
+Typical flow: **researcher** / **web-researcher** gather context (codebase and internet respectively) → **planner** writes the Development Plan → several **implementer** and **test-writer** agents run in parallel over the plan's disjoint tasks → **architecture-reviewer** and **plan-verifier** check the result (quality and requirement-coverage respectively) → **doc-writer** documents it.
 
 ---
 
@@ -51,7 +52,13 @@ Executes a single scoped task from the Development Plan and nothing more. Mandat
 
 ## researcher
 
-Read-only lookup agent (codebase or internet); never edits. Not based on external best-practice research — it's a project utility used to *gather* the sources the other agents are built on. See [researcher.md](researcher.md) for its constraints.
+Read-only **codebase** lookup agent — finds files, configs, patterns, and git history in this repo; never edits, and has no web or network access. A project utility, not based on external best-practice research.
+
+## web-researcher
+
+Read-only **internet** lookup agent — finds and verifies facts, docs, library releases, and best practices on the web, with links; no filesystem or terminal access. This is the agent that *gathered* the external sources the other agents are built on.
+
+**Why researcher and web-researcher are split (security):** a single agent holding both filesystem-read and web-fetch forms the "lethal trifecta" — access to private data (files/secrets) + exposure to untrusted content (fetched pages) + an external channel to exfiltrate through (a crafted `WebFetch`/`curl` URL). A prompt-injection payload in a fetched page — which we observed in practice during development — could then read a secret and leak it via a constructed fetch URL. Splitting the capability so **no single agent holds both legs** removes that path structurally: `web-researcher` sees untrusted content but has nothing local to steal; `researcher` can read files but has no way to reach the network. Each also carries explicit injection-defense instructions as defense-in-depth.
 
 ## test-writer
 

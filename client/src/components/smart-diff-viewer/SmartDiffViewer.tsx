@@ -17,7 +17,7 @@
 
 import React from "react";
 import { useTranslations } from "next-intl";
-import { Icon, SectionLabel, Badge, type IconName } from "@devdigest/ui";
+import { Icon, SectionLabel, Badge, Button, type IconName } from "@devdigest/ui";
 import { useSmartDiff } from "@/lib/hooks/smart-diff";
 import { usePullDetail } from "@/lib/hooks/core";
 import { FileCard } from "@/components/diff-viewer/FileCard";
@@ -183,7 +183,7 @@ function GroupSection({
 
 export function SmartDiffViewer({ prId }: { prId: string | null | undefined }) {
   const t = useTranslations("common");
-  const { data: smartDiff } = useSmartDiff(prId);
+  const { data: smartDiff, isError, refetch } = useSmartDiff(prId);
   const { data: pullDetail } = usePullDetail(prId);
 
   const filesByPath = React.useMemo(() => {
@@ -191,6 +191,22 @@ export function SmartDiffViewer({ prId }: { prId: string | null | undefined }) {
     for (const f of pullDetail?.files ?? []) map.set(f.path, f);
     return map;
   }, [pullDetail?.files]);
+
+  // A failed query must not masquerade as a perpetual loader — show an error
+  // with a retry. (Only when there's no data to fall back on; a background
+  // refetch error keeps the last good render.)
+  if (isError && !smartDiff) {
+    return (
+      <div style={s.empty}>
+        <div>{t("states.error")}</div>
+        <div style={{ marginTop: 12 }}>
+          <Button kind="secondary" size="sm" onClick={() => refetch()}>
+            {t("actions.retry")}
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   if (!smartDiff) {
     return <div style={s.empty}>{t("states.loading")}</div>;

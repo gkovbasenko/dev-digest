@@ -60,4 +60,11 @@ describe("DiffTab", () => {
     fireEvent.click(screen.getByRole("button", { name: /Show comments/ }));
     expect(screen.getByRole("button", { name: /Hide comments/ })).toBeInTheDocument();
   });
+
+  it("shows no comments toggle when there are no comments (gated by count, not canComment)", () => {
+    commentsData = []; // no comments — the Show/Hide control must be absent
+    renderWithIntl(<DiffTab prId="pr1" filesCount={1} files={FILES} canComment />);
+
+    expect(screen.queryByRole("button", { name: /comments/i })).not.toBeInTheDocument();
+  });
 });

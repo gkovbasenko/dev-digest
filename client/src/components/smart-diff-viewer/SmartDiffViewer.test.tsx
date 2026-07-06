@@ -78,12 +78,14 @@ const PULL_DETAIL = {
 
 let smartDiffData: unknown = SMART_DIFF;
 let pullDetailData: unknown = PULL_DETAIL;
+let smartDiffError = false;
+const refetchSpy = vi.fn();
 // jsdom doesn't implement scrollIntoView (so this is `undefined` by default);
 // capture it and restore in afterEach so a test's stub never leaks to others.
 const originalScrollIntoView = Element.prototype.scrollIntoView;
 
 vi.mock("@/lib/hooks/smart-diff", () => ({
-  useSmartDiff: () => ({ data: smartDiffData }),
+  useSmartDiff: () => ({ data: smartDiffData, isError: smartDiffError, refetch: refetchSpy }),
 }));
 vi.mock("@/lib/hooks/core", () => ({
   usePullDetail: () => ({ data: pullDetailData }),
@@ -95,6 +97,8 @@ afterEach(() => {
   cleanup();
   smartDiffData = SMART_DIFF;
   pullDetailData = PULL_DETAIL;
+  smartDiffError = false;
+  refetchSpy.mockClear();
   Element.prototype.scrollIntoView = originalScrollIntoView;
 });
 
@@ -274,6 +278,51 @@ describe("SmartDiffViewer", () => {
 
     expect(screen.getByText("Core logic")).toBeInTheDocument();
     expect(screen.queryByText("Wiring")).not.toBeInTheDocument();
+  });
+
+  it("shows an error state with a working retry (not a perpetual loader) when the query fails", () => {
+    smartDiffData = undefined;
+    smartDiffError = true;
+    renderWithIntl(<SmartDiffViewer prId="pr1" />);
+
+    expect(screen.getByText(commonMessages.states.error)).toBeInTheDocument();
+    expect(screen.queryByText(commonMessages.states.loading)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: commonMessages.actions.retry }));
+    expect(refetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("expands the collapsed boilerplate group when its header is clicked", () => {
+    renderWithIntl(<SmartDiffViewer prId="pr1" />);
+
+    expect(screen.queryByText("pnpm-lock.yaml")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText("Boilerplate"));
+    expect(screen.getByText("pnpm-lock.yaml")).toBeInTheDocument();
+  });
+
+  it("collapses an initially-open group when its header is clicked", () => {
+    renderWithIntl(<SmartDiffViewer prId="pr1" />);
+
+    expect(screen.getByText("src/core/reviewer.ts")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Core logic"));
+    expect(screen.queryByText("src/core/reviewer.ts")).not.toBeInTheDocument();
+  });
+
+  it("toggles a group via keyboard (Enter) on its header", () => {
+    renderWithIntl(<SmartDiffViewer prId="pr1" />);
+
+    expect(screen.queryByText("pnpm-lock.yaml")).not.toBeInTheDocument();
+    fireEvent.keyDown(screen.getByText("Boilerplate"), { key: "Enter" });
+    expect(screen.getByText("pnpm-lock.yaml")).toBeInTheDocument();
+  });
+
+  it("renders every file header-only (no crash) when the pull detail is undefined", () => {
+    pullDetailData = undefined;
+    renderWithIntl(<SmartDiffViewer prId="pr1" />);
+
+    // The core file path still shows (header-only card); no diff lines rendered.
+    expect(screen.getByText("src/core/reviewer.ts")).toBeInTheDocument();
+    expect(document.querySelector("[data-line]")).toBeNull();
   });
 });
 

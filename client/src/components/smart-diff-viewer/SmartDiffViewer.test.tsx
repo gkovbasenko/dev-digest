@@ -324,6 +324,46 @@ describe("SmartDiffViewer", () => {
     expect(screen.getByText("src/core/reviewer.ts")).toBeInTheDocument();
     expect(document.querySelector("[data-line]")).toBeNull();
   });
+
+  it("re-opens a badge-opened file after the user manually collapses it (nonce-driven)", () => {
+    // Collapsed flagged file (additions > auto-expand threshold).
+    smartDiffData = {
+      groups: [
+        {
+          role: "core" as const,
+          files: [
+            {
+              path: "src/big.ts",
+              pseudocode_summary: null,
+              additions: 300,
+              deletions: 0,
+              findings: [{ start_line: 5, end_line: 5, severity: "CRITICAL" as const }],
+            },
+          ],
+        },
+      ],
+      split_suggestion: { too_big: true, total_lines: 300, proposed_splits: [] },
+    };
+    pullDetailData = {
+      files: [
+        { path: "src/big.ts", additions: 300, deletions: 0, patch: "@@ -1,4 +1,6 @@\n a\n b\n c\n d\n+e\n+f" },
+      ],
+      commits: [],
+    };
+    Element.prototype.scrollIntoView = vi.fn();
+    renderWithIntl(<SmartDiffViewer prId="pr1" />);
+
+    const badge = screen.getByRole("button", { name: "1 findings" });
+
+    fireEvent.click(badge); // badge opens the collapsed card
+    expect(document.querySelector('[data-line="5"]')).not.toBeNull();
+
+    fireEvent.click(screen.getByText("src/big.ts")); // manual collapse via the file header
+    expect(document.querySelector('[data-line="5"]')).toBeNull();
+
+    fireEvent.click(badge); // nonce bumps → re-opens even after manual collapse
+    expect(document.querySelector('[data-line="5"]')).not.toBeNull();
+  });
 });
 
 describe("severityAt", () => {

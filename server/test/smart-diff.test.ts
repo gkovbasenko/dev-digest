@@ -118,6 +118,13 @@ describe('composeSmartDiff', () => {
     expect(result.groups).toEqual([{ role: 'core', files: expect.any(Array) }]);
   });
 
+  it('includes only the non-empty role groups when one of several roles has no files', () => {
+    // core + wiring present, no boilerplate at all → exactly two groups, in order.
+    const files = [file('src/foo.ts'), file('vite.config.ts')];
+    const result = composeSmartDiff(files, []);
+    expect(result.groups.map((g) => g.role)).toEqual(['core', 'wiring']);
+  });
+
   it('returns empty groups and a zero split_suggestion for no files', () => {
     const result = composeSmartDiff([], []);
     expect(result).toEqual({

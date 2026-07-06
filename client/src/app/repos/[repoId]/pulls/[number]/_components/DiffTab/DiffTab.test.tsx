@@ -16,7 +16,11 @@ vi.mock("@/components/smart-diff-viewer", () => ({
   SmartDiffViewer: () => <div data-testid="smart-diff-viewer" />,
 }));
 vi.mock("@/components/diff-viewer", () => ({
-  DiffViewer: () => <div data-testid="diff-viewer" />,
+  // Capture the files prop so a test can assert DiffTab passes it through
+  // unchanged (a stub that ignores props would hide a wrong-array regression).
+  DiffViewer: (props: { files: unknown }) => (
+    <div data-testid="diff-viewer" data-files={JSON.stringify(props.files)} />
+  ),
 }));
 
 import { DiffTab } from "./DiffTab";
@@ -66,5 +70,13 @@ describe("DiffTab", () => {
     renderWithIntl(<DiffTab prId="pr1" filesCount={1} files={FILES} canComment />);
 
     expect(screen.queryByRole("button", { name: /comments/i })).not.toBeInTheDocument();
+  });
+
+  it("passes the files prop through to the Original-order DiffViewer unchanged", () => {
+    renderWithIntl(<DiffTab prId="pr1" filesCount={1} files={FILES} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Original order" }));
+    const dv = screen.getByTestId("diff-viewer");
+    expect(JSON.parse(dv.getAttribute("data-files")!)).toEqual(FILES);
   });
 });

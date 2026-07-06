@@ -112,5 +112,14 @@
     "openTrace": "Open run trace & logs",
     "deleteRun": "Delete run",
     "findingsHoverHeader": "{count} findings in this run"
+  },
+  "intent": {
+    "title": "Intent",
+    "summary": "Summary",
+    "inScope": "In scope",
+    "outOfScope": "Out of scope",
+    "emptyTitle": "No intent computed yet",
+    "compute": "Compute intent",
+    "recompute": "Recompute"
   }
 }

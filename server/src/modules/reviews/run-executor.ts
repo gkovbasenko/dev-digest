@@ -1,5 +1,5 @@
 import type { Container } from '../../platform/container.js';
-import type { Provider, Review, RunTrace, UnifiedDiff } from '@devdigest/shared';
+import type { Intent, Provider, Review, RunTrace, UnifiedDiff } from '@devdigest/shared';
 import { reviewPullRequest, countBlockers } from '@devdigest/reviewer-core';
 import { RunLogger } from '../../platform/run-logger.js';
 import * as schema from '../../db/schema.js';
@@ -8,6 +8,7 @@ import type { ReviewRepository, FindingRow, PullRow, ReviewRow } from './reposit
 import { REVIEW_STRATEGY } from './constants.js';
 import { taskLine } from './helpers.js';
 import { loadDiff } from './diff-loader.js';
+import { computeIntent, renderIntent } from './intent/compute.js';
 
 /** Thrown by a run when the user cancels it mid-flight (between map files). */
 export class RunCancelledError extends Error {
@@ -104,6 +105,35 @@ export class ReviewRunExecutor {
     }
     runLog.info(`Diff ready — ${diff.files.length} changed file(s); starting ${jobs.length} agent run(s)`);
 
+    // Intent (derived PR scope): compute once per PR, up front — reused across
+    // every queued agent below. Best-effort: an intent failure never blocks the
+    // review itself (unlike the diff), it just runs without the `## Intent`
+    // section, same as when repo-intel enrichment is unavailable.
+    let intent: Intent | undefined;
+    try {
+      intent = await runLog.step(
+        'Loading PR intent',
+        async () => {
+          const existing = await this.repo.getIntent(pull.id);
+          if (existing) return existing;
+          const files = await this.repo.getPrFiles(pull.id);
+          const computed = await computeIntent({
+            container: this.container,
+            workspaceId,
+            pull,
+            repo,
+            files,
+            logger,
+          });
+          await this.repo.upsertIntent(pull.id, computed);
+          return computed;
+        },
+        { kind: 'tool' },
+      );
+    } catch (err) {
+      runLog.info(`Intent computation failed (continuing without it): ${(err as Error).message}`);
+    }
+
     for (const { agent, runId } of jobs) {
       const agentStart = Date.now();
       logger?.info(
@@ -111,7 +141,7 @@ export class ReviewRunExecutor {
         `review: agent "${agent.name}" started (${agent.provider}/${agent.model})`,
       );
       try {
-        const outcome = await this.runOneAgent(workspaceId, pull, repo, diff, agent, runId, runLog);
+        const outcome = await this.runOneAgent(workspaceId, pull, repo, diff, agent, runId, runLog, intent);
         logger?.info(
           {
             runId,
@@ -143,6 +173,7 @@ export class ReviewRunExecutor {
     agent: AgentRow,
     runId: string,
     parentLog: RunLogger,
+    intent?: Intent,
   ): Promise<RunOutcome> {
     const start = Date.now();
     // Narrow the fanned-out pre-work logger to THIS run; the shared diff/intent
@@ -203,6 +234,9 @@ export class ReviewRunExecutor {
         // PR author's description/body — untrusted; assemblePrompt wraps +
         // truncates it. Omitted when the PR has no body.
         ...(pull.body ? { prDescription: pull.body } : {}),
+        // Derived intent/scope (pre-rendered from the stored `Intent` record).
+        // Omitted when intent computation failed above.
+        ...(intent ? { intent: renderIntent(intent) } : {}),
         task,
         sessionId: `${repo.owner}/${repo.name}#${pull.number}:${agent.name}`,
         onEvent: (e) => runLog.event(e.kind, e.msg, e.data),

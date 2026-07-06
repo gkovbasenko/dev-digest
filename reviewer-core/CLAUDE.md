@@ -46,3 +46,5 @@
 
 - [README.md](./README.md) — pipeline (diff → prompt → LLM → grounding → findings), public API
 - [../docs/agent-prompts/README.md](../docs/agent-prompts/README.md) — prompt rules, severity rubric
+
+@INSIGHTS.md

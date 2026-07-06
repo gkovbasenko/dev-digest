@@ -5,6 +5,14 @@ Newest first. See `.claude/skills/engineering-insights/SKILL.md` for what belong
 
 ---
 
+## 2026-07-06 — SmartDiffViewer's patch join reuses `usePullDetail`; it is NOT a new staleness surface, and the patch must not be duplicated into the smart-diff response
+
+`SmartDiffViewer` joins each file's `patch` from `usePullDetail(prId).files` by path (the `/pulls/:id/smart-diff` payload is deliberately patch-less). A review flagged this as a "stale / wrong-PR patch" bug (80% conf). It isn't: `usePullDetail` is keyed `["pull", prId]` with `prId` a stable per-PR uuid (`lib/hooks/core.ts:116`), so it can never return a *different* PR's data — the "from a different PR entirely" premise is false. And the **Original**-order diff already renders from the same `usePullDetail` files (`DiffTab.tsx:15,83`, sourced in `page.tsx`), so Smart order adds no source the page didn't already depend on. Residual same-PR staleness (PR force-pushed, cache not yet refetched) is shared with the Original view and self-heals via TanStack refetch (`refetchOnWindowFocus` + 60s interval on the sibling pull queries).
+
+**How to apply:** do NOT "fix" this by putting `patch` into the smart-diff response — it duplicates large patch text the page already holds (reversing the intentional light-payload design) and wouldn't remove cross-query skew anyway, since the Original view still needs `usePullDetail`. Contrast with the *severity* overlay, which WAS moved into the response — that was a genuine second source of truth (which review's findings), whereas the patch has exactly one canonical source already.
+
+**Evidence:** `lib/hooks/core.ts:116` (`["pull", prId]` key), `_components/DiffTab/DiffTab.tsx:15,83` (Original view uses the same `files`), `components/smart-diff-viewer/SmartDiffViewer.tsx` (`usePullDetail` join); rejected review finding, 2026-07-06.
+
 ## 2026-07-02 — `getByDisplayValue` silently fails on multi-line `<textarea>` values because RTL's default normalizer collapses whitespace
 
 Testing Library's default text normalizer (used by `getByDisplayValue` too, not just `getByText`/`getByPlaceholderText`) collapses all whitespace — including embedded newlines — to single spaces before matching. Asserting `getByDisplayValue(multiLineString)` against a real controlled `<textarea>` whose `.value` contains `\n` therefore never matches, even though the rendered DOM's actual value is byte-identical to the string you passed in (confirmed via the query's own DOM dump in the failure output).

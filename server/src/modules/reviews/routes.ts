@@ -16,6 +16,7 @@ import { ReviewService } from './service.js';
  *   POST   /findings/:id/(accept|dismiss)              → finding actions
  *   GET    /pulls/:id/intent                           → stored derived intent/scope, or null
  *   POST   /pulls/:id/intent/recompute                 → (re)compute + persist intent; returns it
+ *   GET    /pulls/:id/smart-diff                       → deterministic Smart Diff (no LLM, no persistence)
  */
 const FINDING_ACTIONS = ['accept', 'dismiss'] as const;
 export default async function reviewsRoutes(appBase: FastifyInstance) {
@@ -165,4 +166,10 @@ export default async function reviewsRoutes(appBase: FastifyInstance) {
       return service.recomputeIntent(workspaceId, req.params.id, req.log);
     },
   );
+
+  // ---- Smart Diff (deterministic re-layout; no LLM, no persistence) -------
+  app.get('/pulls/:id/smart-diff', { schema: { params: IdParams } }, async (req) => {
+    const { workspaceId } = await getContext(container, req);
+    return service.getSmartDiff(workspaceId, req.params.id);
+  });
 }

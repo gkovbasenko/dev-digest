@@ -100,10 +100,11 @@ Precondition: `@devdigest/api` must be running locally (`cd server && pnpm dev`,
 otherwise.
 
 The server runs from source via `tsx` (repo convention — no build/dist step), so it's launched
-with `npx tsx <absolute-path-to>/mcp/src/index.ts`. Use an **absolute path**, since `claude mcp
-add`/`.mcp.json` may be resolved from a different working directory than this repo.
+with `npx tsx <path-to>/mcp/src/index.ts`.
 
 ### Option A — `claude mcp add` CLI
+
+The CLI can be invoked from any directory, so use an **absolute path** here:
 
 ```bash
 claude mcp add dev-digest \
@@ -113,12 +114,15 @@ claude mcp add dev-digest \
 
 ### Option B — project `.mcp.json`
 
+A project-scoped `.mcp.json` is launched with the repo root as the working directory, so a
+**repo-relative path** works and keeps the file portable across contributors (checked into git):
+
 ```json
 {
   "mcpServers": {
     "dev-digest": {
       "command": "npx",
-      "args": ["-y", "tsx", "/Users/gkovbasenko/app/ai/dev-digest/mcp/src/index.ts"],
+      "args": ["-y", "tsx", "mcp/src/index.ts"],
       "env": {
         "DEVDIGEST_API_URL": "http://localhost:3001"
       }

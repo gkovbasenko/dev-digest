@@ -9,11 +9,11 @@ files + already-computed findings into the `SmartDiff` contract.
 
 | Item | Choice |
 |---|---|
-| Findings source | Latest review only (`reviewsForPull(prId)[0]`), per brief. `finding_lines` = `start_line` of each finding in that file; badge `N` = `finding_lines.length`. Caveat: latest-only can hide open findings from prior runs (`server/INSIGHTS.md` 2026-06-30) — accepted for v1. |
+| Findings source | Latest review only (`reviewsForPull(prId)[0]`), per brief. Each file carries `findings: {start_line, end_line, severity}[]`; badge `N` = `findings.length`. Caveat: latest-only can hide open findings from prior runs (`server/INSIGHTS.md` 2026-06-30) — accepted for v1. |
 | `pseudocode_summary` | `null` — populating it needs an LLM, which the brief forbids at this step. Follow-up. |
 | `split_suggestion` | Deterministic: `too_big = total_lines > 400`; `proposed_splits` grouped by top-level directory. Threshold in constants. |
 | Classification | Pure fn of `path` (+ size for split). boilerplate = lockfiles/dist/build/out/.next/snapshots/*.min/*.map/vendor; wiring = *.config.*/tsconfig*/index barrels/server.ts/main.ts/package.json/.github; core = everything else. Patterns in a constants file. |
-| Contract | **Unchanged** — `SmartDiff`/`SmartDiffResponse` already defined + mirrored byte-for-byte. Severity is NOT in the contract; client colors lines from its own `usePrReviews` findings. |
+| Contract | `SmartDiffFile.findings` carries `{start_line, end_line, severity}` per finding (post-review change: was `finding_lines: number[]`). Single source of truth — badge count, jump target, and line color all read from the server-composed latest review, so the client no longer re-joins a separately-cached `usePrReviews`. Mirrored byte-for-byte server↔client. |
 | Endpoint payload | Light — no `patch`. Client joins `patch` from `usePullDetail().files` by `path`; `finding_lines` drives badge + jump. |
 
 ## Contract (already in `vendor/shared/contracts/brief.ts:81-113`, mirrored)

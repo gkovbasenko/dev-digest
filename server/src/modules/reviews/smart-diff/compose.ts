@@ -21,16 +21,16 @@ export function composeSmartDiff(files: PrFile[], findings: Finding[]): SmartDif
 
   for (const file of files) {
     const role = classifyFile(file.path);
-    const findingLines = findings
+    const fileFindings = findings
       .filter((f) => f.file === file.path)
-      .map((f) => f.start_line);
+      .map((f) => ({ start_line: f.start_line, end_line: f.end_line, severity: f.severity }));
 
     byRole.get(role)!.push({
       path: file.path,
       pseudocode_summary: null,
       additions: file.additions,
       deletions: file.deletions,
-      finding_lines: findingLines,
+      findings: fileFindings,
     });
   }
 

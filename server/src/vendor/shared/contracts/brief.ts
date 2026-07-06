@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { Severity } from './findings.js';
 
 /**
  * PR Brief building blocks: Intent, Blast radius, Risks, PR History,
@@ -81,12 +82,26 @@ export type PrHistory = z.infer<typeof PrHistory>;
 export const SmartDiffRole = z.enum(['core', 'wiring', 'boilerplate']);
 export type SmartDiffRole = z.infer<typeof SmartDiffRole>;
 
+/**
+ * A single review finding overlaid on a Smart Diff file. Carries its own line
+ * range + severity so the "N findings" badge, the jump-to-line target, and the
+ * per-line color all read from ONE source — the latest review, picked
+ * server-side — instead of the client re-joining a separately-cached reviews
+ * query that could drift out of sync with the badge count.
+ */
+export const SmartDiffFinding = z.object({
+  start_line: z.number().int(),
+  end_line: z.number().int(),
+  severity: Severity,
+});
+export type SmartDiffFinding = z.infer<typeof SmartDiffFinding>;
+
 export const SmartDiffFile = z.object({
   path: z.string(),
   pseudocode_summary: z.string().nullish(),
   additions: z.number().int(),
   deletions: z.number().int(),
-  finding_lines: z.array(z.number().int()),
+  findings: z.array(SmartDiffFinding),
 });
 export type SmartDiffFile = z.infer<typeof SmartDiffFile>;
 

@@ -82,24 +82,27 @@ describe('composeSmartDiff', () => {
     expect(result.groups).toEqual([{ role: 'core', files: expect.any(Array) }]);
   });
 
-  it('sets finding_lines from findings matching the file path, per file', () => {
+  it('sets findings (line range + severity) from findings matching the file path, per file', () => {
     const files = [file('src/foo.ts'), file('src/bar.ts')];
     const findings = [finding('src/foo.ts', 10), finding('src/foo.ts', 20), finding('src/bar.ts', 5)];
     const result = composeSmartDiff(files, findings);
     const core = result.groups.find((g) => g.role === 'core')!;
     const foo = core.files.find((f) => f.path === 'src/foo.ts')!;
     const bar = core.files.find((f) => f.path === 'src/bar.ts')!;
-    expect(foo.finding_lines).toEqual([10, 20]);
-    expect(bar.finding_lines).toEqual([5]);
+    expect(foo.findings).toEqual([
+      { start_line: 10, end_line: 10, severity: 'WARNING' },
+      { start_line: 20, end_line: 20, severity: 'WARNING' },
+    ]);
+    expect(bar.findings).toEqual([{ start_line: 5, end_line: 5, severity: 'WARNING' }]);
     expect(foo.pseudocode_summary).toBeNull();
   });
 
-  it('leaves finding_lines empty for every file when there are no findings', () => {
+  it('leaves findings empty for every file when there are no findings', () => {
     const files = [file('src/foo.ts'), file('vite.config.ts')];
     const result = composeSmartDiff(files, []);
     for (const group of result.groups) {
       for (const f of group.files) {
-        expect(f.finding_lines).toEqual([]);
+        expect(f.findings).toEqual([]);
       }
     }
   });

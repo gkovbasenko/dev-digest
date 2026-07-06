@@ -17,7 +17,10 @@ const SMART_DIFF = {
           pseudocode_summary: null,
           additions: 3,
           deletions: 1,
-          finding_lines: [1, 2],
+          findings: [
+            { start_line: 1, end_line: 1, severity: "WARNING" as const },
+            { start_line: 2, end_line: 2, severity: "WARNING" as const },
+          ],
         },
       ],
     },
@@ -29,7 +32,7 @@ const SMART_DIFF = {
           pseudocode_summary: null,
           additions: 1,
           deletions: 0,
-          finding_lines: [],
+          findings: [],
         },
       ],
     },
@@ -41,7 +44,7 @@ const SMART_DIFF = {
           pseudocode_summary: null,
           additions: 200,
           deletions: 5,
-          finding_lines: [],
+          findings: [],
         },
       ],
     },
@@ -73,53 +76,14 @@ const PULL_DETAIL = {
   commits: [],
 };
 
-const REVIEWS = [
-  {
-    id: "r1",
-    pr_id: "pr1",
-    agent_id: null,
-    run_id: null,
-    agent_name: "Agent",
-    kind: "review",
-    verdict: "comment",
-    summary: "",
-    score: 80,
-    model: null,
-    grounding: null,
-    created_at: "2026-01-01T00:00:00Z",
-    findings: [
-      {
-        id: "f1",
-        review_id: "r1",
-        accepted_at: null,
-        dismissed_at: null,
-        severity: "WARNING",
-        category: "bug",
-        title: "Possible bug",
-        file: "src/core/reviewer.ts",
-        start_line: 2,
-        end_line: 2,
-        rationale: "rationale",
-        suggestion: null,
-        confidence: 0.8,
-        kind: "finding",
-      },
-    ],
-  },
-];
-
 let smartDiffData: unknown = SMART_DIFF;
 let pullDetailData: unknown = PULL_DETAIL;
-let reviewsData: unknown = REVIEWS;
 
 vi.mock("@/lib/hooks/smart-diff", () => ({
   useSmartDiff: () => ({ data: smartDiffData }),
 }));
 vi.mock("@/lib/hooks/core", () => ({
   usePullDetail: () => ({ data: pullDetailData }),
-}));
-vi.mock("@/lib/hooks/reviews", () => ({
-  usePrReviews: () => ({ data: reviewsData }),
 }));
 
 import { SmartDiffViewer } from "./SmartDiffViewer";
@@ -128,7 +92,6 @@ afterEach(() => {
   cleanup();
   smartDiffData = SMART_DIFF;
   pullDetailData = PULL_DETAIL;
-  reviewsData = REVIEWS;
 });
 
 function renderWithIntl(ui: React.ReactElement) {
@@ -164,7 +127,7 @@ describe("SmartDiffViewer", () => {
     expect(screen.queryByText("pnpm-lock.yaml")).not.toBeInTheDocument();
   });
 
-  it("shows a findings badge sized by finding_lines.length only on flagged files", () => {
+  it("shows a findings badge sized by findings.length only on flagged files", () => {
     renderWithIntl(<SmartDiffViewer prId="pr1" />);
 
     expect(screen.getByText("2 findings")).toBeInTheDocument();

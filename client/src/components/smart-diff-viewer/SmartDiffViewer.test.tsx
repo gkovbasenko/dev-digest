@@ -159,6 +159,38 @@ describe("SmartDiffViewer", () => {
     expect(screen.getByText(commonMessages.states.empty)).toBeInTheDocument();
   });
 
+  it("renders a header-only fallback for a file the pull detail omits (binary / no patch)", () => {
+    // A smart-diff file with no matching PrFile in usePullDetail — the server
+    // listed it but GitHub omitted its patch (binary/large), or the pull-detail
+    // response hasn't loaded it. Must render the header (path + badge), no diff
+    // body, and not crash.
+    smartDiffData = {
+      groups: [
+        {
+          role: "core" as const,
+          files: [
+            {
+              path: "src/orphan.ts",
+              pseudocode_summary: null,
+              additions: 4,
+              deletions: 0,
+              findings: [{ start_line: 1, end_line: 1, severity: "WARNING" as const }],
+            },
+          ],
+        },
+      ],
+      split_suggestion: { too_big: false, total_lines: 4, proposed_splits: [] },
+    };
+    pullDetailData = { files: [], commits: [] }; // no patch for src/orphan.ts
+
+    renderWithIntl(<SmartDiffViewer prId="pr1" />);
+
+    expect(screen.getByText("src/orphan.ts")).toBeInTheDocument();
+    expect(screen.getByText("1 findings")).toBeInTheDocument();
+    // Header-only: no FileCard body, so no rendered diff lines.
+    expect(document.querySelector("[data-line]")).toBeNull();
+  });
+
   it("opens a collapsed flagged file and scrolls to the exact finding line on badge click", () => {
     // Flagged file big enough to start COLLAPSED (additions+deletions above the
     // FileCard auto-expand threshold), so the click must both open it AND scroll

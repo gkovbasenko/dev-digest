@@ -102,6 +102,10 @@ npm install
   you just triggered — easy to mistake stale findings for fresh ones. Today the only signal a
   run landed is the aggregate changing (verdict/score/finding count). Consider a
   `runId`-scoped fetch or a `dev_digest_get_run_status(runId)` tool.
+- [ ] **`dev_digest_get_findings` returns the full findings list uncapped — unbounded response
+  size.** There is no top-N limit or truncation, so a PR with hundreds of findings dumps the
+  entire list into the chat context. Cap it to top-N by severity with a `+N more` marker
+  (mirroring the PR-list popover already in `server/`), optionally via a `limit` arg.
 - [ ] `dev_digest_get_blast_radius` is a stub (`{ status: 'not_implemented' }`) — implement once
   the server exposes the blast-radius endpoint (plan L04).
 - [ ] `GET /repos/:id/pulls` does a live GitHub sync per call, making PR-number resolution slow —

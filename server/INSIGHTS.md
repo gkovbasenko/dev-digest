@@ -5,6 +5,14 @@ Newest first. See `.claude/skills/engineering-insights/SKILL.md` for what belong
 
 ---
 
+## 2026-07-06 — The reviews module declares NO route-level `response` schemas by convention; "add response: {200: X}" findings are informational, not defects
+
+Every route in `server/src/modules/reviews/routes.ts` declares only input schemas (`params`/`body`), never a `response` schema — `POST /pulls/:id/review`, `GET /pulls/:id/reviews`, `GET /pulls/:id/runs`, `GET /pulls/:id/intent`, `GET /pulls/:id/smart-diff`, etc. Output fidelity is guaranteed by the handlers' TypeScript return types plus, for structured outputs, a service-level zod parse (`getSmartDiff` → `SmartDiff.parse(result)` before returning; same shape-drift guard the route schema would add, but earlier). Nothing generates OpenAPI from these routes today, so a response schema buys no docs either.
+
+A review finding of the form "add `response: { 200: SmartDiffResponse }` to `GET /pulls/:id/smart-diff`" has now been raised twice (2026-07-06). It is informational by the module's own convention — adding it to one route makes that route the lone outlier without fixing any real gap. If route-level response schemas are ever wanted, adopt them **module-wide** as a deliberate change, not bolted onto one new endpoint. (It is also not a security issue — the body is an already-`parse`-validated internal object.)
+
+**Evidence:** `server/src/modules/reviews/routes.ts` (no `response:` key on any route, incl. `GET /pulls/:id/intent` and `GET /pulls/:id/smart-diff`); `server/src/modules/reviews/smart-diff/compose.ts` (`SmartDiff.parse` before return); rejected review finding, rounds 5–6.
+
 ## 2026-07-06 — `OctokitGitHubClient.resolveLinkedIssue` is `private`; re-derive the same regex instead of trying to call it
 
 `server/src/adapters/github/octokit.ts`'s `resolveLinkedIssue(repo, body)` (the `#123`/`closes #123` regex + `getIssue` lookup) is a private method on the class, not part of the `GitHubClient` interface (`server/src/vendor/shared/adapters.ts`). A caller outside that file cannot invoke it. Widening the interface to expose it would require adding it to `GitHubClient`, implementing it in every mock (`adapters/mocks.ts`), and — because `adapters.ts` is mirrored to `client/src/vendor/shared/adapters.ts` (same byte-for-byte rule as `contracts/*`) — mirroring that edit too, for a client that never calls it.

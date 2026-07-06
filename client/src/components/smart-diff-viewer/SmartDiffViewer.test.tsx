@@ -240,10 +240,40 @@ describe("SmartDiffViewer", () => {
     fireEvent.click(screen.getByRole("button", { name: "1 findings" }));
 
     // Opened (line now rendered) and scrolled to the *exact* finding line.
-    expect(document.querySelector('[data-line="5"]')).not.toBeNull();
+    const row5 = document.querySelector('[data-line="5"]');
+    expect(row5).not.toBeNull();
     expect(scrollIntoView).toHaveBeenCalledTimes(1);
     expect(scrolledEl).not.toBeNull();
     expect(scrolledEl!.getAttribute("data-line")).toBe("5");
+
+    // Integration check: the CRITICAL finding paints a severity accent on the
+    // line (CodeLine renders `boxShadow: inset 3px ...` when severity is set).
+    const lineRow = row5!.firstElementChild as HTMLElement;
+    expect(lineRow.style.boxShadow).toContain("inset 3px");
+    // An unflagged line (line 1) gets no accent.
+    const row1 = document.querySelector('[data-line="1"]')!.firstElementChild as HTMLElement;
+    expect(row1.style.boxShadow).toBe("");
+  });
+
+  it("skips a group that arrives with an empty files array without crashing", () => {
+    // The server omits empty groups, but the client must stay resilient if one
+    // ever arrives (the `group.files.length === 0` guard).
+    smartDiffData = {
+      groups: [
+        {
+          role: "core" as const,
+          files: [
+            { path: "src/x.ts", pseudocode_summary: null, additions: 1, deletions: 0, findings: [] },
+          ],
+        },
+        { role: "wiring" as const, files: [] },
+      ],
+      split_suggestion: { too_big: false, total_lines: 1, proposed_splits: [] },
+    };
+    renderWithIntl(<SmartDiffViewer prId="pr1" />);
+
+    expect(screen.getByText("Core logic")).toBeInTheDocument();
+    expect(screen.queryByText("Wiring")).not.toBeInTheDocument();
   });
 });
 

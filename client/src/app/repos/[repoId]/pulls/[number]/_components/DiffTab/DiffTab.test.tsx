@@ -4,8 +4,9 @@ import { NextIntlClientProvider } from "next-intl";
 import messages from "../../../../../../../../messages/en/prReview.json";
 import type { PrFile } from "@/lib/types";
 
+let commentsData: unknown = [];
 vi.mock("@/lib/hooks/reviews", () => ({
-  usePrComments: () => ({ data: [] }),
+  usePrComments: () => ({ data: commentsData }),
   useCreatePrComment: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
@@ -20,7 +21,10 @@ vi.mock("@/components/diff-viewer", () => ({
 
 import { DiffTab } from "./DiffTab";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  commentsData = [];
+});
 
 const FILES: PrFile[] = [{ path: "src/a.ts", additions: 1, deletions: 0, patch: null }];
 
@@ -47,5 +51,13 @@ describe("DiffTab", () => {
     fireEvent.click(screen.getByRole("button", { name: "Smart order" }));
     expect(screen.getByTestId("smart-diff-viewer")).toBeInTheDocument();
     expect(screen.queryByTestId("diff-viewer")).not.toBeInTheDocument();
+  });
+
+  it("keeps the pre-existing comments toggle working within the new order-toggle layout", () => {
+    commentsData = [{ id: "c1" }]; // one comment → the Show/Hide control appears
+    renderWithIntl(<DiffTab prId="pr1" filesCount={1} files={FILES} canComment />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Show comments/ }));
+    expect(screen.getByRole("button", { name: /Hide comments/ })).toBeInTheDocument();
   });
 });

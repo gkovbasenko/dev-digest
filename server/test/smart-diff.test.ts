@@ -66,6 +66,12 @@ describe('classifyFile', () => {
   it('classifies a dotenv variant as wiring', () => {
     expect(classifyFile('.env.production')).toBe('wiring');
   });
+
+  it('prioritizes boilerplate over wiring when a path matches both', () => {
+    // dist/ (boilerplate dir) beats config.json (wiring) — classifyFile runs
+    // the boilerplate check first; a swap of that order would break this.
+    expect(classifyFile('dist/config.json')).toBe('boilerplate');
+  });
 });
 
 function file(path: string, additions = 1, deletions = 1): PrFile {
@@ -118,6 +124,19 @@ describe('composeSmartDiff', () => {
       groups: [],
       split_suggestion: { too_big: false, total_lines: 0, proposed_splits: [] },
     });
+  });
+
+  it('drops findings whose file matches no PR file', () => {
+    const files = [file('src/foo.ts')];
+    const findings = [finding('src/foo.ts', 3), finding('ghost.ts', 9)];
+    const result = composeSmartDiff(files, findings);
+    const foo = result.groups
+      .find((g) => g.role === 'core')!
+      .files.find((f) => f.path === 'src/foo.ts')!;
+    expect(foo.findings).toEqual([{ start_line: 3, end_line: 3, severity: 'WARNING' }]);
+    // ghost.ts is not a PR file, so it never appears anywhere in the output.
+    const allPaths = result.groups.flatMap((g) => g.files.map((f) => f.path));
+    expect(allPaths).not.toContain('ghost.ts');
   });
 
   it('sets findings (line range + severity) from findings matching the file path, per file', () => {

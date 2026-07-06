@@ -5,6 +5,14 @@ Newest first. See `.claude/skills/engineering-insights/SKILL.md` for what belong
 
 ---
 
+## 2026-07-06 — `OctokitGitHubClient.resolveLinkedIssue` is `private`; re-derive the same regex instead of trying to call it
+
+`server/src/adapters/github/octokit.ts`'s `resolveLinkedIssue(repo, body)` (the `#123`/`closes #123` regex + `getIssue` lookup) is a private method on the class, not part of the `GitHubClient` interface (`server/src/vendor/shared/adapters.ts`). A caller outside that file cannot invoke it. Widening the interface to expose it would require adding it to `GitHubClient`, implementing it in every mock (`adapters/mocks.ts`), and — because `adapters.ts` is mirrored to `client/src/vendor/shared/adapters.ts` (same byte-for-byte rule as `contracts/*`) — mirroring that edit too, for a client that never calls it.
+
+For `server/src/modules/reviews/intent/compute.ts` (PR-intent derivation), the lower-scope fix was to duplicate the identical regex (`/(?:closes|fixes|resolves)?\s*#(\d+)/i`) locally and call it against the PR body, then use the already-public `GitHubClient.getIssue(repo, n)` to fetch it. Same behavior, zero interface/mirror churn. If a third consumer needs this exact logic, promote it to an exported free function (e.g. in `adapters.ts` or a small shared util) instead of a third copy-paste.
+
+**Evidence:** `server/src/adapters/github/octokit.ts:126-135` (private `resolveLinkedIssue`), `server/src/modules/reviews/intent/compute.ts` (`resolveLinkedIssue` local re-implementation using the public `getIssue`), `server/src/vendor/shared/adapters.ts:143-167` (`GitHubClient` interface — no `resolveLinkedIssue` member).
+
 ## 2026-07-02 — A clone-directory containment check needs BOTH a syntactic path check AND a `realpath`-based symlink check — one alone is not enough
 
 `node:path`'s `join()`/`resolve()` do NOT sandbox — `resolve(clonePath, '../../etc/passwd')` happily resolves outside `clonePath`. First fix: `resolveClonePath(clonePath, file)` in `conventions/helpers.ts` does `path.resolve()` on both sides and requires the result to equal the root or start with `root + path.sep` (trailing separator matters — without it, a sibling dir like `acme-repo-evil` passes a naive `.startsWith(root)` check since it shares `acme-repo` as a string prefix). That closed `../`-style traversal in `evidence_path`, the LLM's untrusted structured-output field.

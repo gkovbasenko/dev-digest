@@ -1,5 +1,5 @@
 import type { Container } from '../../platform/container.js';
-import type { FindingActionKind, RunEventKind, RunTrace } from '@devdigest/shared';
+import type { FindingActionKind, PrIntentRecord, RunEventKind, RunTrace } from '@devdigest/shared';
 import { AppError, NotFoundError } from '../../platform/errors.js';
 import type { AgentRow } from '../../db/rows.js';
 import { ReviewRepository } from './repository.js';
@@ -7,6 +7,7 @@ import { type ReviewDto, type ReviewDtoFinding } from './helpers.js';
 import { ReviewRunExecutor, type Logger } from './run-executor.js';
 import { actOnFinding as actOnFindingImpl } from './findings.js';
 import { reviewToDto } from './helpers.js';
+import { computeIntent, type IntentLogger } from './intent/compute.js';
 
 // Re-export DTO types + converters for backward-compatible imports from
 // './service.js' (these previously lived here; logic now in ./helpers.ts).
@@ -175,5 +176,41 @@ export class ReviewService {
 
   async getRunTrace(runId: string): Promise<RunTrace | undefined> {
     return this.repo.getRunTrace(runId);
+  }
+
+  // ===========================================================================
+  // Intent (derived PR scope)
+  // ===========================================================================
+
+  /** Stored intent for a PR, or null when none has been computed yet. */
+  async getIntent(workspaceId: string, prId: string): Promise<PrIntentRecord | null> {
+    const pull = await this.repo.getPull(workspaceId, prId);
+    if (!pull) throw new NotFoundError('Pull request not found');
+    const intent = await this.repo.getIntent(prId);
+    return intent ? { ...intent, pr_id: prId } : null;
+  }
+
+  /** Compute (or re-compute) a PR's intent/scope and upsert it (PK on prId). */
+  async recomputeIntent(
+    workspaceId: string,
+    prId: string,
+    logger?: IntentLogger,
+  ): Promise<PrIntentRecord> {
+    const pull = await this.repo.getPull(workspaceId, prId);
+    if (!pull) throw new NotFoundError('Pull request not found');
+    const repo = await this.repo.getRepo(pull.repoId);
+    if (!repo) throw new NotFoundError('Repo not found');
+    const files = await this.repo.getPrFiles(prId);
+
+    const intent = await computeIntent({
+      container: this.container,
+      workspaceId,
+      pull,
+      repo,
+      files,
+      logger,
+    });
+    await this.repo.upsertIntent(prId, intent);
+    return { ...intent, pr_id: prId };
   }
 }

@@ -76,3 +76,5 @@ grounding — there is no runtime dependency in either direction.
 
 - [README.md](./README.md) — Claude Code registration snippet, usage
 - [../docs/plans/mcp-server.md](../docs/plans/mcp-server.md) — full development plan, grounding, decisions
+
+@INSIGHTS.md

@@ -93,6 +93,20 @@ npm install
 - `dev_digest_get_conventions` — accepted/candidate coding conventions for a repo
 - `dev_digest_get_blast_radius` — **stub** for now (`{ status: 'not_implemented', hint }`)
 
+## TODO / Known limitations
+
+- [ ] **`dev_digest_get_findings` has no `runId` filter — cannot isolate a single run's output.**
+  It aggregates open findings across *all* `kind:'review'` rows on the PR, so when
+  `dev_digest_run_review` exceeds `WAIT_TIMEOUT_MS` and returns `{ status: 'running' }`, an
+  immediate `get_findings` call returns the **pre-run aggregate** (prior reviews), not the run
+  you just triggered — easy to mistake stale findings for fresh ones. Today the only signal a
+  run landed is the aggregate changing (verdict/score/finding count). Consider a
+  `runId`-scoped fetch or a `dev_digest_get_run_status(runId)` tool.
+- [ ] `dev_digest_get_blast_radius` is a stub (`{ status: 'not_implemented' }`) — implement once
+  the server exposes the blast-radius endpoint (plan L04).
+- [ ] `GET /repos/:id/pulls` does a live GitHub sync per call, making PR-number resolution slow —
+  optional server-side lookup endpoint deferred (plan T6).
+
 ## Registering with Claude Code
 
 Precondition: `@devdigest/api` must be running locally (`cd server && pnpm dev`, default

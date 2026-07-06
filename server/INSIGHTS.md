@@ -5,6 +5,12 @@ Newest first. See `.claude/skills/engineering-insights/SKILL.md` for what belong
 
 ---
 
+## 2026-07-06 — The `pulls` module has NO service/repository layer — routes hit `container.db` directly (skill table is aspirational)
+
+The `server-architecture` skill's module table lists `pulls` with "repository ✓", but the module folder is only `helpers.ts`, `routes.ts`, `status.ts` — no `service.ts`, no `repository.ts`. `pulls/routes.ts` queries `container.db` **directly** (~22 call sites), and the existing `GET /repos/:id/pulls` is a "fat" route doing DB + GitHub sync inline. So when ADDING a read route to `pulls` (e.g. a persisted-only `pr number → prId` lookup), mirror this pattern — direct `container.db` read in the route, no GitHub adapter call — rather than inventing a lone repository/service layer, which would break the module's consistency. The onion route→db dependency rule is still honored either way.
+
+**Evidence:** `ls server/src/modules/pulls` → helpers.ts, routes.ts, status.ts; `grep -c container.db server/src/modules/pulls/routes.ts` → 22; discovered during MCP-server plan architecture review (2026-07-06).
+
 ## 2026-07-06 — The intent→reviewer two-hop is accepted residual injection risk; the defense is wrapUntrusted + INJECTION_GUARD + grounding, NOT a second LLM validation pass
 
 Flow: PR body (untrusted) → cheap intent model → `renderIntent` → injected into the reviewer prompt as `ReviewInput.intent`. A review flagged this as a prompt-injection/exfiltration surface. It is **accepted residual risk, not a defect**, and the mitigations are layered + deterministic: (1) reviewer-core's `assemblePrompt` wraps the intent block via `wrapUntrusted('intent', …)`, so `INJECTION_GUARD` covers it; (2) `INTENT_SCOPE_RULE` frames intent as context, not instructions; (3) `groundFindings` drops any finding whose line range doesn't intersect a real diff hunk, bounding what a jailbroken reviewer could surface. The finding itself concedes "not a lethal trifecta — the untrusted body never reaches the reviewer directly; mitigations are strong."

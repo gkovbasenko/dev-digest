@@ -20,7 +20,8 @@ files + already-computed findings into the `SmartDiff` contract.
 
 ```
 SmartDiffRole = 'core' | 'wiring' | 'boilerplate'
-SmartDiffFile = { path, pseudocode_summary?, additions, deletions, finding_lines: number[] }
+SmartDiffFinding = { start_line, end_line, severity }   // post-review: was a bare finding_lines: number[]
+SmartDiffFile = { path, pseudocode_summary?, additions, deletions, findings: SmartDiffFinding[] }
 SmartDiffGroup = { role, files: SmartDiffFile[] }
 SmartDiff = { groups: SmartDiffGroup[], split_suggestion: { too_big, total_lines, proposed_splits: {name, files[]}[] } }
 SmartDiffResponse = SmartDiff   // review-api.ts:63-65
@@ -33,15 +34,15 @@ GET /pulls/:id/smart-diff
    getPrFiles(prId)  ─┐
    reviewsForPull[0] ─┼─▶ composeSmartDiff(files, latestFindings)
                       │      classifyFile(path) → role      (pure, constants)
-                      │      finding_lines = startLines per file (latest review)
+                      │      findings = {start_line,end_line,severity} per file (latest review)
                       │      group by role; split_suggestion by dir + threshold
                       ▼
                    SmartDiff  ──▶ client useSmartDiff
 Files-changed tab: [Smart order | Original order] toggle
    Smart  → SmartDiffViewer: Core / Wiring / Boilerplate(collapsed) groups,
             reuse FileCard/parsePatch per file (patch joined from usePullDetail by path),
-            "N findings" badge (finding_lines.length), click badge → open + scrollIntoView(line),
-            line severity color from usePrReviews findings (join file+line)
+            "N findings" badge (findings.length), click badge → open + scrollIntoView(line),
+            line severity color from each file's own findings (single source; no usePrReviews join)
    Original → existing flat DiffViewer (unchanged)
 ```
 
@@ -60,7 +61,7 @@ Mirror the Intent Layer trio (`reviews/routes.ts`, `service.ts`, `reviews/intent
 
 **S3 — composer** `server/src/modules/reviews/smart-diff/compose.ts`
 - Pure `composeSmartDiff(files: PrFile[], findings: Finding[]): SmartDiff`:
-  - per file: `role = classifyFile(path)`, `finding_lines = findings.filter(f=>f.file===path).map(f=>f.start_line)`, `pseudocode_summary = null`.
+  - per file: `role = classifyFile(path)`, `findings = findings.filter(f=>f.file===path).map(f=>({start_line,end_line,severity}))`, `pseudocode_summary = null`.
   - group into `SmartDiffGroup[]` in fixed order core → wiring → boilerplate (omit empty groups or keep? keep all three present-if-nonempty; order fixed).
   - `total_lines = Σ(additions+deletions)`; `too_big = total_lines > SPLIT_TOO_BIG_LINES`; `proposed_splits` = files grouped by top-level dir (first path segment), each `{name, files: path[]}` — empty array when not `too_big` or ≤1 dir.
 - Validate output with the `SmartDiff` zod schema before returning.
@@ -70,7 +71,7 @@ Mirror the Intent Layer trio (`reviews/routes.ts`, `service.ts`, `reviews/intent
 - `server/src/modules/reviews/routes.ts`: `GET /pulls/:id/smart-diff` (mirror `GET /pulls/:id/intent` at :154-157; add to the doc header block). No POST/persistence — pure compute, no LLM, nothing to store.
 - **No contract change, no DB change, no `index.ts`/`app.ts` change** (route lives in the already-registered `reviews` module).
 
-**Tests** `server/test/smart-diff.test.ts`: `classifyFile` for representative paths (ratelimit.ts→core, config.ts→wiring, package-lock.json→boilerplate); `composeSmartDiff` — grouping, `finding_lines` from findings, `split_suggestion` threshold + dir grouping, empty-findings path.
+**Tests** `server/test/smart-diff.test.ts`: `classifyFile` for representative paths (ratelimit.ts→core, config.ts→wiring, package-lock.json→boilerplate); `composeSmartDiff` — grouping, `findings` (line range + severity) from findings, `split_suggestion` threshold + dir grouping, empty-findings path.
 
 **Verify (from `server/`, pnpm):** `pnpm typecheck` + `pnpm test` (hermetic; `.it.test.ts` need Docker — skip if unavailable, pre-existing).
 

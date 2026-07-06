@@ -241,7 +241,7 @@ describe("SmartDiffViewer", () => {
     // Starts collapsed: the target diff line isn't in the DOM yet.
     expect(document.querySelector('[data-line="5"]')).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "1 findings" }));
+    fireEvent.click(screen.getByRole("button", { name: /1 findings/ }));
 
     // Opened (line now rendered) and scrolled to the *exact* finding line.
     const row5 = document.querySelector('[data-line="5"]');
@@ -353,7 +353,7 @@ describe("SmartDiffViewer", () => {
     Element.prototype.scrollIntoView = vi.fn();
     renderWithIntl(<SmartDiffViewer prId="pr1" />);
 
-    const badge = screen.getByRole("button", { name: "1 findings" });
+    const badge = screen.getByRole("button", { name: /1 findings/ });
 
     fireEvent.click(badge); // badge opens the collapsed card
     expect(document.querySelector('[data-line="5"]')).not.toBeNull();

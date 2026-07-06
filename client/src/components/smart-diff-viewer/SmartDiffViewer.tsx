@@ -88,7 +88,10 @@ function SmartDiffFileRow({
           setJump((prev) => ({ line, nonce: (prev?.nonce ?? 0) + 1 }));
         }}
         style={s.findingsBadgeBtn}
-        aria-label={t("smartDiff.findingsBadge", { count: findingCount })}
+        // Action-descriptive accessible name for this jump button. Keeps the
+        // visible "{count} findings" text as a prefix so WCAG 2.5.3 (Label in
+        // Name) still holds — a bare "jump to…" label would drop the visible text.
+        aria-label={t("smartDiff.findingsBadgeJump", { count: findingCount, path: file.path })}
       >
         <Badge icon="AlertTriangle" color="var(--warn)" bg="var(--warn-bg)">
           {t("smartDiff.findingsBadge", { count: findingCount })}

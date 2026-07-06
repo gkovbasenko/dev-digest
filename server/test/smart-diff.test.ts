@@ -36,6 +36,34 @@ describe('classifyFile', () => {
   it('classifies a snapshot file as boilerplate', () => {
     expect(classifyFile('src/__snapshots__/foo.test.ts.snap')).toBe('boilerplate');
   });
+
+  it('classifies a bare *.lock file as boilerplate', () => {
+    expect(classifyFile('Gemfile.lock')).toBe('boilerplate');
+  });
+
+  it('classifies a minified file as boilerplate', () => {
+    expect(classifyFile('public/app.min.js')).toBe('boilerplate');
+  });
+
+  it('classifies a sourcemap (outside a build dir) as boilerplate', () => {
+    expect(classifyFile('src/app.js.map')).toBe('boilerplate');
+  });
+
+  it('classifies a prefixed tsconfig as wiring', () => {
+    expect(classifyFile('tsconfig.build.json')).toBe('wiring');
+  });
+
+  it('classifies a .github workflow as wiring', () => {
+    expect(classifyFile('.github/workflows/ci.yml')).toBe('wiring');
+  });
+
+  it('classifies an app entrypoint basename as wiring', () => {
+    expect(classifyFile('src/server.ts')).toBe('wiring');
+  });
+
+  it('classifies a dotenv variant as wiring', () => {
+    expect(classifyFile('.env.production')).toBe('wiring');
+  });
 });
 
 function file(path: string, additions = 1, deletions = 1): PrFile {
@@ -80,6 +108,14 @@ describe('composeSmartDiff', () => {
     const files = [file('src/foo.ts')];
     const result = composeSmartDiff(files, []);
     expect(result.groups).toEqual([{ role: 'core', files: expect.any(Array) }]);
+  });
+
+  it('returns empty groups and a zero split_suggestion for no files', () => {
+    const result = composeSmartDiff([], []);
+    expect(result).toEqual({
+      groups: [],
+      split_suggestion: { too_big: false, total_lines: 0, proposed_splits: [] },
+    });
   });
 
   it('sets findings (line range + severity) from findings matching the file path, per file', () => {

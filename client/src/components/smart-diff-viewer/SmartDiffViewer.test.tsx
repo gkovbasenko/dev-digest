@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import prReviewMessages from "../../../messages/en/prReview.json";
 import commonMessages from "../../../messages/en/common.json";
@@ -86,7 +86,7 @@ vi.mock("@/lib/hooks/core", () => ({
   usePullDetail: () => ({ data: pullDetailData }),
 }));
 
-import { SmartDiffViewer } from "./SmartDiffViewer";
+import { SmartDiffViewer, severityAt } from "./SmartDiffViewer";
 
 afterEach(() => {
   cleanup();
@@ -133,5 +133,67 @@ describe("SmartDiffViewer", () => {
     expect(screen.getByText("2 findings")).toBeInTheDocument();
     // The wiring file has no findings — no badge for it.
     expect(screen.queryByText("0 findings")).not.toBeInTheDocument();
+  });
+
+  it("renders a loading state while the smart-diff query is pending", () => {
+    smartDiffData = undefined;
+    renderWithIntl(<SmartDiffViewer prId="pr1" />);
+
+    expect(screen.getByText(commonMessages.states.loading)).toBeInTheDocument();
+    expect(screen.queryByText("Core logic")).not.toBeInTheDocument();
+  });
+
+  it("renders an empty state when the PR has no changed files", () => {
+    smartDiffData = {
+      groups: [],
+      split_suggestion: { too_big: false, total_lines: 0, proposed_splits: [] },
+    };
+    renderWithIntl(<SmartDiffViewer prId="pr1" />);
+
+    expect(screen.getByText(commonMessages.states.empty)).toBeInTheDocument();
+  });
+
+  it("jumps to the flagged line when the findings badge is clicked", () => {
+    // jsdom doesn't implement scrollIntoView; FileCard's jump effect calls it.
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    renderWithIntl(<SmartDiffViewer prId="pr1" />);
+
+    // The badge button's accessible name is its aria-label ("2 findings").
+    fireEvent.click(screen.getByRole("button", { name: "2 findings" }));
+
+    expect(scrollIntoView).toHaveBeenCalled();
+    expect(screen.getByText("src/core/reviewer.ts")).toBeInTheDocument();
+  });
+});
+
+describe("severityAt", () => {
+  const ranges = [
+    { start: 1, end: 10, severity: "WARNING" as const },
+    { start: 5, end: 6, severity: "CRITICAL" as const },
+  ];
+
+  it("returns undefined for a line outside every range", () => {
+    expect(severityAt(ranges, 20)).toBeUndefined();
+  });
+
+  it("returns undefined when there are no ranges", () => {
+    expect(severityAt(undefined, 5)).toBeUndefined();
+    expect(severityAt([], 5)).toBeUndefined();
+  });
+
+  it("returns the severity of a single covering range", () => {
+    expect(severityAt(ranges, 3)).toBe("WARNING");
+  });
+
+  it("returns the highest severity when ranges overlap on a line", () => {
+    expect(severityAt(ranges, 5)).toBe("CRITICAL");
+  });
+
+  it("treats range bounds as inclusive at both ends", () => {
+    const one = [{ start: 4, end: 8, severity: "SUGGESTION" as const }];
+    expect(severityAt(one, 4)).toBe("SUGGESTION");
+    expect(severityAt(one, 8)).toBe("SUGGESTION");
+    expect(severityAt(one, 9)).toBeUndefined();
   });
 });

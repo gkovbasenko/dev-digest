@@ -39,14 +39,15 @@ const ROLE_META: Record<SmartDiffRole, { icon: IconName; labelKey: string; descK
 
 const SEVERITY_RANK: Record<Severity, number> = { CRITICAL: 3, WARNING: 2, SUGGESTION: 1 };
 
-interface FindingRange {
+export interface FindingRange {
   start: number;
   end: number;
   severity: Severity;
 }
 
-/** Worst (most severe) finding covering this line, if any. */
-function severityAt(ranges: FindingRange[] | undefined, line: number): Severity | undefined {
+/** Worst (most severe) finding covering this line, if any. Exported for unit
+    testing — it's the whole correctness of the per-line color overlay. */
+export function severityAt(ranges: FindingRange[] | undefined, line: number): Severity | undefined {
   if (!ranges) return undefined;
   let result: Severity | undefined;
   for (const r of ranges) {

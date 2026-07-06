@@ -2,7 +2,11 @@ import { describe, it, expect } from 'vitest';
 import type { Finding, PrFile } from '@devdigest/shared';
 import { classifyFile } from '../src/modules/reviews/smart-diff/classify.js';
 import { composeSmartDiff } from '../src/modules/reviews/smart-diff/compose.js';
-import { BOILERPLATE_DIRS, SPLIT_TOO_BIG_LINES } from '../src/modules/reviews/smart-diff/constants.js';
+import {
+  BOILERPLATE_DIRS,
+  BOILERPLATE_LOCKFILES,
+  SPLIT_TOO_BIG_LINES,
+} from '../src/modules/reviews/smart-diff/constants.js';
 
 /**
  * S2/S3 unit coverage — pure classification + composition, no DB/network/LLM.
@@ -27,12 +31,22 @@ describe('classifyFile', () => {
     expect(classifyFile(`${dir}/x.js`)).toBe('boilerplate');
   });
 
+  // Same narrowing-regression guard for the named lockfile list.
+  it.each([...BOILERPLATE_LOCKFILES])('classifies the lockfile %s as boilerplate', (lock) => {
+    expect(classifyFile(lock)).toBe('boilerplate');
+  });
+
   it('classifies package.json as wiring', () => {
     expect(classifyFile('package.json')).toBe('wiring');
   });
 
   it('classifies an index barrel as wiring', () => {
     expect(classifyFile('src/modules/reviews/index.ts')).toBe('wiring');
+  });
+
+  it('classifies the second entrypoint/index list entries (main.ts, index.js) as wiring', () => {
+    expect(classifyFile('src/main.ts')).toBe('wiring');
+    expect(classifyFile('src/foo/index.js')).toBe('wiring');
   });
 
   it('classifies a snapshot file as boilerplate', () => {

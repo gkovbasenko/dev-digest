@@ -14,7 +14,7 @@ files + already-computed findings into the `SmartDiff` contract.
 | `split_suggestion` | Deterministic: `too_big = total_lines > 400`; `proposed_splits` grouped by top-level directory. Threshold in constants. |
 | Classification | Pure fn of `path` (+ size for split). boilerplate = lockfiles/dist/build/out/.next/snapshots/*.min/*.map/vendor; wiring = *.config.*/tsconfig*/index barrels/server.ts/main.ts/package.json/.github; core = everything else. Patterns in a constants file. |
 | Contract | `SmartDiffFile.findings` carries `{start_line, end_line, severity}` per finding (post-review change: was `finding_lines: number[]`). Single source of truth — badge count, jump target, and line color all read from the server-composed latest review, so the client no longer re-joins a separately-cached `usePrReviews`. Mirrored byte-for-byte server↔client. |
-| Endpoint payload | Light — no `patch`. Client joins `patch` from `usePullDetail().files` by `path`; `finding_lines` drives badge + jump. |
+| Endpoint payload | Light — no `patch`. Client joins `patch` from `usePullDetail().files` by `path`; `findings` drives badge + jump + line color. |
 
 ## Contract (already in `vendor/shared/contracts/brief.ts:81-113`, mirrored)
 
@@ -87,7 +87,7 @@ Mirror the Intent Layer trio (`reviews/routes.ts`, `service.ts`, `reviews/intent
 - Renders `groups` in fixed order **Core logic / Wiring / Boilerplate**, each with a header (label + one-line description + file count), reusing `Badge`/`SectionLabel`.
 - **Boilerplate group collapsed by default** (hand-rolled `useState(open)` + chevron, per `FileCard`/`ReviewRunAccordion` pattern — no vendored accordion exists).
 - Per file: reuse `diff-viewer/FileCard` + `parsePatch` — join the file's `patch` from `usePullDetail(prId).files` by `path` (smart-diff payload has no patch). If no matching patch, render header-only.
-- **"N findings" badge** on files where `finding_lines.length > 0`; clicking it opens the file card and `scrollIntoView` to the line (reuse the `ReviewRunAccordion` open+scroll pattern; add a `data-line` anchor in `CodeLine`).
+- **"N findings" badge** on files where `findings.length > 0`; clicking it opens the file card and `scrollIntoView` to the line (reuse the `ReviewRunAccordion` open+scroll pattern; add a `data-line` anchor in `CodeLine`).
 - **Line severity color** overlay: from `usePrReviews(prId)` findings joined by `file` + line (`start_line`). Layout works with no reviews yet (badges/colors simply absent) — matches brief ("layout works before review, overlay doesn't").
 
 **C3 — Smart/Original toggle** in `DiffTab.tsx` (or the `page.tsx` `{tab === "diff" && …}` block)
@@ -95,7 +95,7 @@ Mirror the Intent Layer trio (`reviews/routes.ts`, `service.ts`, `reviews/intent
 
 **i18n:** new `smartDiff` namespace in `client/messages/en/*.json` (only `en` exists) — group headers/descriptions, "N findings", "Smart order"/"Original order", empty states.
 
-**Tests** `SmartDiffViewer.test.tsx` (mock `useSmartDiff`/`usePullDetail`/`usePrReviews`): groups render in order; boilerplate collapsed by default; badge shows `finding_lines.length`; toggle switches Smart↔Original. Use `fireEvent` (no `user-event` in this repo, per `client/CLAUDE.md`).
+**Tests** `SmartDiffViewer.test.tsx` (mock `useSmartDiff`/`usePullDetail`): groups render in order; boilerplate collapsed by default; badge shows `findings.length`; toggle switches Smart↔Original. Use `fireEvent` (no `user-event` in this repo, per `client/CLAUDE.md`).
 
 **Verify (from `client/`, pnpm):** `pnpm typecheck` + `pnpm test`.
 
@@ -103,7 +103,7 @@ Mirror the Intent Layer trio (`reviews/routes.ts`, `service.ts`, `reviews/intent
 
 ## Risks / edge cases
 - **Empty `patch`** (GitHub omits patch for huge/binary files) → FileCard header-only; classifier still assigns a role by path.
-- **No review yet** → `finding_lines` all empty, no badges/colors; grouping still works.
+- **No review yet** → `findings` all empty, no badges/colors; grouping still works.
 - **Latest-review-only** hides still-open findings from earlier runs (accepted v1; note in code near the `[0]` pick).
 - **finding line outside rendered hunks** → badge count still correct; jump scrolls to nearest rendered line or no-ops gracefully.
 - **Contract mirror** — no contract edit planned; if one becomes necessary, mirror `server`↔`client` `vendor/shared/contracts/*` byte-for-byte and re-check the two-copy registry rule (root `INSIGHTS.md`).

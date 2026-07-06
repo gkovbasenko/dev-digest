@@ -5,6 +5,14 @@ Newest first. See `.claude/skills/engineering-insights/SKILL.md` for what belong
 
 ---
 
+## 2026-07-06 — The intent→reviewer two-hop is accepted residual injection risk; the defense is wrapUntrusted + INJECTION_GUARD + grounding, NOT a second LLM validation pass
+
+Flow: PR body (untrusted) → cheap intent model → `renderIntent` → injected into the reviewer prompt as `ReviewInput.intent`. A review flagged this as a prompt-injection/exfiltration surface. It is **accepted residual risk, not a defect**, and the mitigations are layered + deterministic: (1) reviewer-core's `assemblePrompt` wraps the intent block via `wrapUntrusted('intent', …)`, so `INJECTION_GUARD` covers it; (2) `INTENT_SCOPE_RULE` frames intent as context, not instructions; (3) `groundFindings` drops any finding whose line range doesn't intersect a real diff hunk, bounding what a jailbroken reviewer could surface. The finding itself concedes "not a lethal trifecta — the untrusted body never reaches the reviewer directly; mitigations are strong."
+
+**Do NOT** adopt the suggested "run a second LLM validation prompt on the intent" fix: it doubles cost (defeating the cheap-flash-model design), and an LLM validator is itself injectable — it adds a probabilistic gate in front of the already-stronger deterministic ones. Tightening the `Intent` schema (length caps) is not a real injection defense either (a jailbreak is short). If this is re-raised, point here.
+
+**Evidence:** `reviewer-core/src/prompt.ts` (`wrapUntrusted('intent', …)`, `INJECTION_GUARD`, `INTENT_SCOPE_RULE`), `reviewer-core/src/grounding.ts` (`groundFindings`), `server/src/modules/reviews/intent/compute.ts` (`renderIntent`); rejected review finding, 2026-07-06.
+
 ## 2026-07-06 — The reviews module declares NO route-level `response` schemas by convention; "add response: {200: X}" findings are informational, not defects
 
 Every route in `server/src/modules/reviews/routes.ts` declares only input schemas (`params`/`body`), never a `response` schema — `POST /pulls/:id/review`, `GET /pulls/:id/reviews`, `GET /pulls/:id/runs`, `GET /pulls/:id/intent`, `GET /pulls/:id/smart-diff`, etc. Output fidelity is guaranteed by the handlers' TypeScript return types plus, for structured outputs, a service-level zod parse (`getSmartDiff` → `SmartDiff.parse(result)` before returning; same shape-drift guard the route schema would add, but earlier). Nothing generates OpenAPI from these routes today, so a response schema buys no docs either.

@@ -28,6 +28,17 @@ describe('extractHunkHeaders', () => {
     expect(extractHunkHeaders(undefined)).toEqual([]);
     expect(extractHunkHeaders('')).toEqual([]);
   });
+
+  it('does not mistake a diff-body line starting with @@ for a header (e.g. Ruby class vars)', () => {
+    // The context line is space-prefixed; after trim it starts with "@@" but is
+    // NOT a valid hunk header and must not leak into the headers-only output.
+    const patch = '@@ -1,3 +1,4 @@\n class C\n   @@count = 0\n+  @@total = 1';
+    expect(extractHunkHeaders(patch)).toEqual(['@@ -1,3 +1,4 @@']);
+  });
+
+  it('matches a header without line counts (@@ -a +c @@)', () => {
+    expect(extractHunkHeaders('@@ -1 +1 @@\n context')).toEqual(['@@ -1 +1 @@']);
+  });
 });
 
 describe('hunkHeadersForFiles', () => {
@@ -155,9 +166,104 @@ describe('computeIntent', () => {
     // Diff body lines must NOT leak into the intent-only prompt.
     expect(userMessage).not.toContain('stripeKey');
 
-    // Token-savings log line.
+    // Token-savings log line — including the estimated full-diff alternative
+    // and the derived savings, not just tokensIn.
     expect(logged).toHaveLength(1);
-    expect(logged[0]).toMatchObject({ prId: 'pr-1', tokensIn: 55 });
+    const patchLen = files[0]!.patch!.length;
+    const expectedEst = Math.round(patchLen / 4);
+    expect(logged[0]).toMatchObject({
+      prId: 'pr-1',
+      tokensIn: 55,
+      estFullDiffTokens: expectedEst,
+      savedApprox: Math.max(0, expectedEst - 55),
+    });
+  });
+
+  it('ignores a bare #123 with no closing keyword — no phantom linked-issue fetch', async () => {
+    // A URL and a bare mention, neither preceded by close/fix/resolve — the
+    // stricter regex must NOT resolve a phantom issue (no getIssue call).
+    const llm = fakeLlm();
+    const issueCalls: number[] = [];
+    const pull: IntentPrInput = {
+      id: 'pr-5',
+      number: 14,
+      title: 'Docs tweak',
+      body: 'See https://github.com/acme/x/issues/123 and #999 for background.',
+    };
+    const files = [{ path: 'README.md', patch: '@@ -1,1 +1,2 @@\n+x\n' }];
+
+    const result = await computeIntent({
+      container: fakeContainer({
+        llm,
+        getIssue: async (n) => {
+          issueCalls.push(n);
+          return { number: n, title: 't', body: '', state: 'open' };
+        },
+      }),
+      workspaceId: 'ws-1',
+      pull,
+      repo: REPO,
+      files,
+    });
+
+    expect(result).toEqual(FIXTURE_INTENT);
+    expect(issueCalls).toEqual([]);
+    const userMessage = (llm.calls[0]!.messages.find((m) => m.role === 'user')?.content ?? '') as string;
+    expect(userMessage).toContain('(No linked issue found.)');
+  });
+
+  it('falls back to "(No linked issue found.)" when the linked-issue fetch throws', async () => {
+    const llm = fakeLlm();
+    const pull: IntentPrInput = {
+      id: 'pr-3',
+      number: 12,
+      title: 'Fix retries',
+      body: 'Closes #471.',
+    };
+    const files = [{ path: 'src/x.ts', patch: '@@ -1,1 +1,2 @@\n+x\n' }];
+
+    const result = await computeIntent({
+      container: fakeContainer({
+        llm,
+        getIssue: async () => {
+          throw new Error('GitHub 404');
+        },
+      }),
+      workspaceId: 'ws-1',
+      pull,
+      repo: REPO,
+      files,
+    });
+
+    expect(result).toEqual(FIXTURE_INTENT);
+    const userMessage = (llm.calls[0]!.messages.find((m) => m.role === 'user')?.content ?? '') as string;
+    expect(userMessage).toContain('(No linked issue found.)');
+    // Body IS present, so the no-documentation fallback must NOT appear.
+    expect(userMessage).not.toMatch(/No PR description or linked issue is available/i);
+  });
+
+  it('shows "(No linked issue found.)" without the no-doc fallback when the body has no issue reference', async () => {
+    const llm = fakeLlm();
+    const pull: IntentPrInput = {
+      id: 'pr-4',
+      number: 13,
+      title: 'Tidy retry logic',
+      body: 'Fix a bug in the retry backoff — no ticket.',
+    };
+    const files = [{ path: 'src/x.ts', patch: '@@ -1,1 +1,2 @@\n+x\n' }];
+
+    await computeIntent({
+      container: fakeContainer({ llm }),
+      workspaceId: 'ws-1',
+      pull,
+      repo: REPO,
+      files,
+    });
+
+    const userMessage = (llm.calls[0]!.messages.find((m) => m.role === 'user')?.content ?? '') as string;
+    expect(userMessage).toContain('## PR description');
+    expect(userMessage).toContain('(No linked issue found.)');
+    expect(userMessage).not.toMatch(/No PR description or linked issue is available/i);
   });
 
   it('resolves and includes a linked issue referenced in the PR body', async () => {

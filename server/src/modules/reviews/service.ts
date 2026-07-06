@@ -1,13 +1,20 @@
 import type { Container } from '../../platform/container.js';
-import type { FindingActionKind, PrIntentRecord, RunEventKind, RunTrace } from '@devdigest/shared';
+import type {
+  FindingActionKind,
+  PrIntentRecord,
+  RunEventKind,
+  RunTrace,
+  SmartDiffResponse,
+} from '@devdigest/shared';
 import { AppError, NotFoundError } from '../../platform/errors.js';
 import type { AgentRow } from '../../db/rows.js';
 import { ReviewRepository } from './repository.js';
 import { type ReviewDto, type ReviewDtoFinding } from './helpers.js';
 import { ReviewRunExecutor, type Logger } from './run-executor.js';
 import { actOnFinding as actOnFindingImpl } from './findings.js';
-import { reviewToDto } from './helpers.js';
+import { findingRowToDto, reviewToDto } from './helpers.js';
 import { computeIntent, type IntentLogger } from './intent/compute.js';
+import { composeSmartDiff } from './smart-diff/compose.js';
 
 // Re-export DTO types + converters for backward-compatible imports from
 // './service.js' (these previously lived here; logic now in ./helpers.ts).
@@ -212,5 +219,26 @@ export class ReviewService {
     });
     await this.repo.upsertIntent(prId, intent);
     return { ...intent, pr_id: prId };
+  }
+
+  // ===========================================================================
+  // Smart Diff (deterministic re-layout; no LLM call, no persistence)
+  // ===========================================================================
+
+  /**
+   * Compose a PR's Smart Diff: classify each changed file (core/wiring/
+   * boilerplate) and overlay finding line numbers, purely from already-fetched
+   * files + already-computed findings.
+   */
+  async getSmartDiff(workspaceId: string, prId: string): Promise<SmartDiffResponse> {
+    const pull = await this.repo.getPull(workspaceId, prId);
+    if (!pull) throw new NotFoundError('Pull request not found');
+    const files = await this.repo.getPrFiles(prId);
+    const reviews = await this.repo.reviewsForPull(prId);
+    // Latest-review-only: `reviewsForPull` returns newest-first, so `[0]` is
+    // the most recent run. This can hide open findings from earlier reviews
+    // (server/INSIGHTS.md 2026-06-30) — accepted for Smart Diff v1.
+    const findings = (reviews[0]?.findings ?? []).map(findingRowToDto);
+    return composeSmartDiff(files, findings);
   }
 }

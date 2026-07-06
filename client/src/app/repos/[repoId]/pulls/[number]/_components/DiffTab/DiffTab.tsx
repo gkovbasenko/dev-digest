@@ -1,8 +1,10 @@
 "use client";
 
 import React from "react";
-import { SectionLabel, Button } from "@devdigest/ui";
+import { useTranslations } from "next-intl";
+import { SectionLabel, Button, Tabs } from "@devdigest/ui";
 import { DiffViewer, type DiffCommentApi } from "@/components/diff-viewer";
+import { SmartDiffViewer } from "@/components/smart-diff-viewer";
 import { usePrComments, useCreatePrComment } from "@/lib/hooks/reviews";
 import { notify } from "@/lib/toast";
 import type { PrFile } from "@devdigest/shared";
@@ -15,11 +17,17 @@ interface DiffTabProps {
   canComment?: boolean;
 }
 
+type DiffOrder = "smart" | "original";
+
 export function DiffTab({ prId, filesCount, files, canComment }: DiffTabProps) {
+  const t = useTranslations("prReview");
   const { data: comments } = usePrComments(prId);
   const create = useCreatePrComment(prId);
   // Comments start hidden so the diff is clean by default — toggle to reveal.
   const [showComments, setShowComments] = React.useState(false);
+  // Smart order (grouped by role) is the default; Original keeps the existing
+  // flat, file-order DiffViewer unchanged.
+  const [order, setOrder] = React.useState<DiffOrder>("smart");
 
   const commentCount = comments?.length ?? 0;
 
@@ -59,7 +67,22 @@ export function DiffTab({ prId, filesCount, files, canComment }: DiffTabProps) {
       >
         Files changed · {filesCount} files
       </SectionLabel>
-      <DiffViewer files={files} commenting={commenting} />
+      <Tabs
+        tabs={[
+          { key: "smart", label: t("smartDiff.smartOrder") },
+          { key: "original", label: t("smartDiff.originalOrder") },
+        ]}
+        value={order}
+        onChange={(k) => setOrder(k as DiffOrder)}
+        pad="0"
+      />
+      <div style={{ marginTop: 16 }}>
+        {order === "smart" ? (
+          <SmartDiffViewer prId={prId} />
+        ) : (
+          <DiffViewer files={files} commenting={commenting} />
+        )}
+      </div>
     </section>
   );
 }

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import type { Finding, PrFile } from '@devdigest/shared';
 import { classifyFile } from '../src/modules/reviews/smart-diff/classify.js';
 import { composeSmartDiff } from '../src/modules/reviews/smart-diff/compose.js';
-import { SPLIT_TOO_BIG_LINES } from '../src/modules/reviews/smart-diff/constants.js';
+import { BOILERPLATE_DIRS, SPLIT_TOO_BIG_LINES } from '../src/modules/reviews/smart-diff/constants.js';
 
 /**
  * S2/S3 unit coverage — pure classification + composition, no DB/network/LLM.
@@ -21,8 +21,10 @@ describe('classifyFile', () => {
     expect(classifyFile('package-lock.json')).toBe('boilerplate');
   });
 
-  it('classifies a build-output file as boilerplate', () => {
-    expect(classifyFile('dist/x.js')).toBe('boilerplate');
+  // Cover every generated/vendored dir name, so dropping one from the constant
+  // (a narrowing regression) is caught rather than silently accepted.
+  it.each([...BOILERPLATE_DIRS])('classifies a file under %s/ as boilerplate', (dir) => {
+    expect(classifyFile(`${dir}/x.js`)).toBe('boilerplate');
   });
 
   it('classifies package.json as wiring', () => {

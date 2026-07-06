@@ -78,6 +78,9 @@ const PULL_DETAIL = {
 
 let smartDiffData: unknown = SMART_DIFF;
 let pullDetailData: unknown = PULL_DETAIL;
+// jsdom doesn't implement scrollIntoView (so this is `undefined` by default);
+// capture it and restore in afterEach so a test's stub never leaks to others.
+const originalScrollIntoView = Element.prototype.scrollIntoView;
 
 vi.mock("@/lib/hooks/smart-diff", () => ({
   useSmartDiff: () => ({ data: smartDiffData }),
@@ -92,6 +95,7 @@ afterEach(() => {
   cleanup();
   smartDiffData = SMART_DIFF;
   pullDetailData = PULL_DETAIL;
+  Element.prototype.scrollIntoView = originalScrollIntoView;
 });
 
 function renderWithIntl(ui: React.ReactElement) {
@@ -135,7 +139,9 @@ describe("SmartDiffViewer", () => {
     expect(screen.queryByText("0 findings")).not.toBeInTheDocument();
   });
 
-  it("renders a loading state while the smart-diff query is pending", () => {
+  it("renders the loading fallback when the smart-diff query result is absent", () => {
+    // The component gates purely on `!smartDiff` — it never reads isLoading — so
+    // an undefined data result (initial load / cache miss) hits this branch.
     smartDiffData = undefined;
     renderWithIntl(<SmartDiffViewer prId="pr1" />);
 
@@ -153,17 +159,59 @@ describe("SmartDiffViewer", () => {
     expect(screen.getByText(commonMessages.states.empty)).toBeInTheDocument();
   });
 
-  it("jumps to the flagged line when the findings badge is clicked", () => {
-    // jsdom doesn't implement scrollIntoView; FileCard's jump effect calls it.
-    const scrollIntoView = vi.fn();
+  it("opens a collapsed flagged file and scrolls to the exact finding line on badge click", () => {
+    // Flagged file big enough to start COLLAPSED (additions+deletions above the
+    // FileCard auto-expand threshold), so the click must both open it AND scroll
+    // — and to the specific finding line, not just "somewhere".
+    smartDiffData = {
+      groups: [
+        {
+          role: "core" as const,
+          files: [
+            {
+              path: "src/big.ts",
+              pseudocode_summary: null,
+              additions: 300,
+              deletions: 0,
+              findings: [{ start_line: 5, end_line: 5, severity: "CRITICAL" as const }],
+            },
+          ],
+        },
+      ],
+      split_suggestion: { too_big: true, total_lines: 300, proposed_splits: [] },
+    };
+    pullDetailData = {
+      files: [
+        {
+          path: "src/big.ts",
+          additions: 300,
+          deletions: 0,
+          // new line 5 is "+e" → rendered by CodeLine with data-line="5".
+          patch: "@@ -1,4 +1,6 @@\n a\n b\n c\n d\n+e\n+f",
+        },
+      ],
+      commits: [],
+    };
+
+    // Capture the element scrollIntoView is invoked on (its `this`).
+    let scrolledEl: Element | null = null;
+    const scrollIntoView = vi.fn(function (this: Element) {
+      scrolledEl = this;
+    });
     Element.prototype.scrollIntoView = scrollIntoView;
+
     renderWithIntl(<SmartDiffViewer prId="pr1" />);
 
-    // The badge button's accessible name is its aria-label ("2 findings").
-    fireEvent.click(screen.getByRole("button", { name: "2 findings" }));
+    // Starts collapsed: the target diff line isn't in the DOM yet.
+    expect(document.querySelector('[data-line="5"]')).toBeNull();
 
-    expect(scrollIntoView).toHaveBeenCalled();
-    expect(screen.getByText("src/core/reviewer.ts")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "1 findings" }));
+
+    // Opened (line now rendered) and scrolled to the *exact* finding line.
+    expect(document.querySelector('[data-line="5"]')).not.toBeNull();
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(scrolledEl).not.toBeNull();
+    expect(scrolledEl!.getAttribute("data-line")).toBe("5");
   });
 });
 

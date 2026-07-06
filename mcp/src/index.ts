@@ -22,8 +22,8 @@ const INSTRUCTIONS = [
   'Read-only access to dev-digest code review data: agents, findings, and conventions.',
   "Identifiers are human-readable, not uuids — repo is 'owner/name', pr is the PR number, " +
     'agent is the agent name.',
-  'run_review is a paid LLM call that triggers and awaits a review; the other 4 tools are ' +
-    'free and read-only.',
+  'dev_digest_run_review is a paid LLM call that triggers and awaits a review; the other 4 tools ' +
+    'are free and read-only.',
 ].join('\n');
 
 const server = new McpServer(

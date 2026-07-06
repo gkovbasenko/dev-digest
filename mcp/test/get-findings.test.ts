@@ -63,7 +63,7 @@ describe('get_findings', () => {
     const body = parse(result);
     expect(body.verdict).toBeNull();
     expect(body.findings).toEqual([]);
-    expect(body.hint).toContain('run_review');
+    expect(body.hint).toContain('dev_digest_run_review');
   });
 
   it('error-forwards when the PR cannot be resolved', async () => {

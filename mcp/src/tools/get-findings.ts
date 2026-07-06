@@ -54,7 +54,7 @@ function toFindingLite(f: FindingRawRaw): FindingLite {
 }
 
 export const getFindingsTool: ToolDef<typeof InputSchema> = {
-  name: 'get_findings',
+  name: 'dev_digest_get_findings',
   description:
     "Get findings from already-completed reviews of a pull request, as a concise list " +
     '(severity, title, file, line range, category). Read-only; does not start a review.',
@@ -76,7 +76,7 @@ export const getFindingsTool: ToolDef<typeof InputSchema> = {
         verdict: null,
         score: null,
         findings: [],
-        hint: `No reviews yet for ${repo}#${pr} — call run_review to start one.`,
+        hint: `No reviews yet for ${repo}#${pr} — call dev_digest_run_review to start one.`,
       });
     }
 

@@ -18,10 +18,10 @@ interface CompactAgent {
 }
 
 export const listAgentsTool: ToolDef<typeof InputSchema> = {
-  name: 'list_agents',
+  name: 'dev_digest_list_agents',
   description:
     'List the review agents configured in this workspace, with name, provider, model, ' +
-    'and enabled state. Use the returned names as the agent argument for run_review.',
+    'and enabled state. Use the returned names as the agent argument for dev_digest_run_review.',
   inputSchema: InputSchema,
   annotations: { title: 'List agents', readOnlyHint: true },
   handler: async () => {

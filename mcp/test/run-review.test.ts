@@ -71,7 +71,7 @@ describe('run_review', () => {
     expect(body).toEqual({
       runId: RUN_ID,
       status: 'running',
-      hint: `call get_findings later with pr=${PR}`,
+      hint: `call dev_digest_get_findings later with pr=${PR}`,
     });
   });
 
@@ -89,7 +89,7 @@ describe('run_review', () => {
     expect(result.content[0]!.text).toContain(RUN_ID);
     expect(result.content[0]!.text).toContain('failed');
     expect(result.content[0]!.text).toContain('LLM request timed out');
-    expect(result.content[0]!.text).toContain(`get_findings`);
+    expect(result.content[0]!.text).toContain(`dev_digest_get_findings`);
     expect(result.content[0]!.text).toContain(`pr=${PR}`);
   });
 
@@ -104,7 +104,7 @@ describe('run_review', () => {
     expect(result.isError).toBe(true);
     expect(result.content[0]!.text).toContain(RUN_ID);
     expect(result.content[0]!.text).toContain('cancelled');
-    expect(result.content[0]!.text).toContain('get_findings');
+    expect(result.content[0]!.text).toContain('dev_digest_get_findings');
   });
 
   it('rate-limited trigger (429) surfaces an actionable message', async () => {

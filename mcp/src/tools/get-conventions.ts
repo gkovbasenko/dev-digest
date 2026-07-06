@@ -13,7 +13,7 @@ const InputSchema = {
 };
 
 export const getConventionsTool: ToolDef<typeof InputSchema> = {
-  name: 'get_conventions',
+  name: 'dev_digest_get_conventions',
   description:
     'Get the coding conventions extracted for a repository, as a concise list ' +
     '(rule, category, accepted).',

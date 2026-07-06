@@ -86,12 +86,12 @@ npm install
 
 5 tools, all thin wrappers over the API — no business logic lives here:
 
-- `list_agents` — compact list of configured review agents
-- `run_review` — resolve repo/PR/agent → trigger a review → wait for it → return findings
+- `dev_digest_list_agents` — compact list of configured review agents
+- `dev_digest_run_review` — resolve repo/PR/agent → trigger a review → wait for it → return findings
   (graceful timeout fallback if the run is still in progress)
-- `get_findings` — aggregated open findings for a PR
-- `get_conventions` — accepted/candidate coding conventions for a repo
-- `get_blast_radius` — **stub** for now (`{ status: 'not_implemented', hint }`)
+- `dev_digest_get_findings` — aggregated open findings for a PR
+- `dev_digest_get_conventions` — accepted/candidate coding conventions for a repo
+- `dev_digest_get_blast_radius` — **stub** for now (`{ status: 'not_implemented', hint }`)
 
 ## Registering with Claude Code
 
@@ -147,5 +147,5 @@ npm test            # vitest run
 | Var | Default | Purpose |
 |---|---|---|
 | `DEVDIGEST_API_URL` | `http://localhost:3001` | Base URL of the running `@devdigest/api` server |
-| `WAIT_TIMEOUT_MS` | `120000` | Max time `run_review` waits for a triggered run to finish |
+| `WAIT_TIMEOUT_MS` | `120000` | Max time `dev_digest_run_review` waits for a triggered run to finish |
 | `HTTP_TIMEOUT_MS` | `15000` | Per-HTTP-call timeout against the API |

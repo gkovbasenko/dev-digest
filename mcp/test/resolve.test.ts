@@ -77,7 +77,7 @@ describe('resolveAgent', () => {
       expect(result.error).toContain('ambiguous');
       expect(result.error).toContain('ambiguous-name');
       // Every branch names the next useful tool ("error leads forward").
-      expect(result.error).toContain('list_agents');
+      expect(result.error).toContain('dev_digest_list_agents');
       // Both candidates' provider/model/enabled state are listed.
       expect(result.error).toContain('anthropic');
       expect(result.error).toContain('openai');
@@ -89,7 +89,7 @@ describe('resolveAgent', () => {
     const result = await resolveAgent('does-not-exist');
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error).toContain('list_agents');
+      expect(result.error).toContain('dev_digest_list_agents');
     }
   });
 });

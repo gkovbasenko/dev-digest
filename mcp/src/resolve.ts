@@ -86,7 +86,7 @@ export async function resolveAgent(name: string): Promise<ResolveResult> {
   if (matches.length === 0) {
     return {
       ok: false,
-      error: `Agent '${name}' not found — call list_agents to see available agents.`,
+      error: `Agent '${name}' not found — call dev_digest_list_agents to see available agents.`,
     };
   }
   if (matches.length === 1) {
@@ -106,6 +106,6 @@ export async function resolveAgent(name: string): Promise<ResolveResult> {
     error:
       `Agent name '${name}' is ambiguous (${matches.length} agents share this name, ` +
       `${enabledMatches.length} enabled). Candidates: ${candidates}. ` +
-      'Call list_agents for full details and either rename or enable exactly one.',
+      'Call dev_digest_list_agents for full details and either rename or enable exactly one.',
   };
 }

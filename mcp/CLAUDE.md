@@ -24,8 +24,9 @@ every tool calls an existing HTTP endpoint and reshapes the response for token e
 - `src/api-client.ts` — `fetch` wrapper: base URL, timeout, JSON parse, actionable errors
 - `src/resolve.ts` — human-readable id → uuid: `resolveRepo`, `resolvePr`, `resolveAgent`
 - `src/tools/tool.ts` — `ToolDef` contract shared by all tools
-- `src/tools/*.ts` — the 5 MCP tools: `list_agents`, `run_review`, `get_findings`,
-  `get_conventions`, `get_blast_radius` (+ `wait-for-run.ts` polling helper)
+- `src/tools/*.ts` — the 5 MCP tools: `dev_digest_list_agents`, `dev_digest_run_review`,
+  `dev_digest_get_findings`, `dev_digest_get_conventions`, `dev_digest_get_blast_radius`
+  (+ `wait-for-run.ts` polling helper)
 - `src/index.ts` — bootstrap: `McpServer` + `StdioServerTransport`, registers the 5 tools
 - `test/` — vitest: tool input-schema contracts, resolver edge cases, mocked-fetch happy paths
 
@@ -33,7 +34,7 @@ every tool calls an existing HTTP endpoint and reshapes the response for token e
 
 - **Identifiers are human-readable at the tool boundary, resolved to uuid internally.**
   Tools accept `repo` ('owner/name'), `pr` (number), `agent` (name) — never raw uuids.
-- **`run_review` is outcome-oriented**: create run → wait → findings in ONE tool call, with
+- **`dev_digest_run_review` is outcome-oriented**: create run → wait → findings in ONE tool call, with
   a graceful timeout fallback (`WAIT_TIMEOUT_MS`, default 120s) — never a hung call.
 - **Errors are structured tool results, not thrown exceptions**, and every error names the
   next useful tool to call ("error leads forward").
@@ -62,7 +63,7 @@ grounding — there is no runtime dependency in either direction.
   `enabled:true`; if still ambiguous, return an actionable error listing candidates).
 - `GET /repos/:id/pulls` does a live GitHub sync on every call (if a token is configured) —
   resolving a PR number can be slow. Accepted as-is for MVP (see plan's T6, deferred/optional).
-- A PR can have multiple `reviews` rows (one per agent run); `get_findings` must aggregate
+- A PR can have multiple `reviews` rows (one per agent run); `dev_digest_get_findings` must aggregate
   open findings (`dismissed_at === null`) across ALL `kind:'review'` rows, not just the latest.
 
 ## Do not touch

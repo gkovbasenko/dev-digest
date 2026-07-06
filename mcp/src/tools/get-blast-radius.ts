@@ -14,10 +14,10 @@ const InputSchema = {
 };
 
 export const getBlastRadiusTool: ToolDef<typeof InputSchema> = {
-  name: 'get_blast_radius',
+  name: 'dev_digest_get_blast_radius',
   description:
     "Get the blast radius (symbols and callers impacted by a pull request's changes). " +
-    'Not yet implemented — returns a placeholder status; use get_findings for available ' +
+    'Not yet implemented — returns a placeholder status; use dev_digest_get_findings for available ' +
     'review results.',
   inputSchema: InputSchema,
   annotations: { title: 'Get blast radius', readOnlyHint: true },
@@ -25,7 +25,7 @@ export const getBlastRadiusTool: ToolDef<typeof InputSchema> = {
     return textResult({
       status: 'not_implemented',
       hint:
-        'Blast radius (L04) ще не реалізовано; скористайтесь get_findings для наявних ' +
+        'Blast radius (L04) ще не реалізовано; скористайтесь dev_digest_get_findings для наявних ' +
         'результатів review.',
     });
   },

@@ -61,4 +61,29 @@ describe("IntentCard", () => {
     fireEvent.click(recomputeBtn);
     expect(mutate).toHaveBeenCalledTimes(1);
   });
+
+  it("renders the empty state without crashing when prId is nullish", () => {
+    intentData = null; // useIntent is disabled (enabled: prId != null) → no data
+    renderWithIntl(<IntentCard prId={undefined} />);
+
+    expect(screen.getByText("No intent computed yet")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Compute intent" })).toBeInTheDocument();
+  });
+
+  it("omits the scope sections when in_scope / out_of_scope are empty", () => {
+    intentData = {
+      intent: "Fix a one-line typo in the README.",
+      in_scope: [],
+      out_of_scope: [],
+      pr_id: "pr1",
+    };
+    renderWithIntl(<IntentCard prId="pr1" />);
+
+    // Summary still renders...
+    expect(screen.getByText("Summary")).toBeInTheDocument();
+    expect(screen.getByText("Fix a one-line typo in the README.")).toBeInTheDocument();
+    // ...but the empty scope sections are not rendered at all.
+    expect(screen.queryByText("In scope")).not.toBeInTheDocument();
+    expect(screen.queryByText("Out of scope")).not.toBeInTheDocument();
+  });
 });

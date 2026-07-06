@@ -55,8 +55,15 @@ const SYSTEM_PROMPT =
   'changed file paths, and the hunk headers alone (implicit signals) — never refuse or ask ' +
   'for more information.';
 
-/** Regex the GitHub adapter itself uses to find a linked issue in a PR body. */
-const LINKED_ISSUE_RE = /(?:closes|fixes|resolves)?\s*#(\d+)/i;
+/**
+ * A GitHub closing-keyword reference in the PR body (`Closes #123`, `fixes: #4`).
+ * The keyword is REQUIRED and word-boundary-anchored: a bare `#123` in prose, a
+ * URL (`…/issues/123`), or a code sample is NOT a linked issue and must not
+ * resolve a phantom/unrelated one. (Stricter than the GitHub adapter's older
+ * loose regex, which made the keyword optional and matched any `#<n>`.)
+ */
+const LINKED_ISSUE_RE =
+  /\b(?:close|closes|closed|fix|fixes|fixed|resolve|resolves|resolved)[:\s]+#(\d+)\b/i;
 
 /**
  * Best-effort linked-issue resolution over the PR body. Not persisted on the

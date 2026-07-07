@@ -14,7 +14,6 @@ import { PrDetailHeader } from "./_components/PrDetailHeader";
 import { OverviewTab } from "./_components/OverviewTab";
 import { FindingsTab } from "./_components/FindingsTab";
 import { DiffTab } from "./_components/DiffTab";
-import { BlastTab } from "./_components/BlastTab";
 import RunTraceDrawer from "./_components/RunTraceDrawer";
 import { usePullDetail, usePulls } from "../../../../../lib/hooks";
 import { useQueryClient } from "@tanstack/react-query";
@@ -135,7 +134,15 @@ export default function PRDetailPage() {
       />
 
       <div style={{ padding: "24px 32px 44px", display: "flex", flexDirection: "column", gap: 24, maxWidth: 1080, margin: "0 auto" }}>
-        {tab === "overview" && <OverviewTab prId={prId} prBody={pr.body} />}
+        {tab === "overview" && (
+          <OverviewTab
+            prId={prId}
+            prBody={pr.body}
+            repoId={repoId}
+            repoFullName={repoFullName}
+            headSha={pr.head_sha}
+          />
+        )}
 
         {tab === "findings" && (
           <FindingsTab
@@ -169,10 +176,6 @@ export default function PRDetailPage() {
             files={pr.files}
             canComment={pr.status === "open"}
           />
-        )}
-
-        {tab === "blast" && (
-          <BlastTab prId={prId} repoId={repoId} repoFullName={repoFullName} headSha={pr.head_sha} />
         )}
       </div>
 

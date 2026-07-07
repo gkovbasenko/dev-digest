@@ -1,4 +1,4 @@
-/* BlastTab — pure read over the pre-built repo-intel index: changed symbols,
+/* BlastPanel — pure read over the pre-built repo-intel index: changed symbols,
    who calls them (grouped by symbol), affected HTTP endpoints/crons, plus
    counts. GET /pulls/:id/blast is free/deterministic (no LLM). When the index
    is missing/partial we show an honest degraded badge with an explanation —
@@ -35,6 +35,19 @@ function parseEndpoint(endpoint: string): { method: string; path: string } {
   const idx = endpoint.indexOf(" ");
   if (idx === -1) return { method: "", path: endpoint };
   return { method: endpoint.slice(0, idx), path: endpoint.slice(idx + 1) };
+}
+
+/** One compact inline metric — icon, count, label — in the panel header row. */
+function Metric({ icon, value, label }: { icon: React.ReactNode; value: number; label: string }) {
+  return (
+    <span style={s.metric}>
+      {icon}
+      <span className="tnum" style={s.metricValue}>
+        {value}
+      </span>
+      <span style={s.metricLabel}>{label}</span>
+    </span>
+  );
 }
 
 function EndpointChip({ endpoint }: { endpoint: string }) {
@@ -189,7 +202,7 @@ function PriorPrsAccordion({ prId, repoId }: { prId: string | null; repoId: stri
   );
 }
 
-export function BlastTab({
+export function BlastPanel({
   prId,
   repoId,
   repoFullName,
@@ -236,8 +249,31 @@ export function BlastTab({
 
   return (
     <div style={s.root}>
-      <div style={s.headerRow}>
-        <SectionLabel icon="Boxes">{t("blast.title")}</SectionLabel>
+      <SectionLabel icon="Boxes">{t("blast.title")}</SectionLabel>
+
+      <div style={s.metricsRow}>
+        <div style={s.metrics}>
+          <Metric
+            icon={<Icon.Code size={13} style={{ color: "var(--text-muted)" }} />}
+            value={blast.changed_symbols.length}
+            label={t("blast.symbols")}
+          />
+          <Metric
+            icon={<Icon.CornerDownRight size={13} style={{ color: "var(--text-muted)" }} />}
+            value={callerCount}
+            label={t("blast.callers")}
+          />
+          <Metric
+            icon={<Icon.Globe size={13} style={{ color: "var(--text-muted)" }} />}
+            value={blast.impacted_endpoints.length}
+            label={t("blast.endpoints")}
+          />
+          <Metric
+            icon={<Icon.Clock size={13} style={{ color: "var(--text-muted)" }} />}
+            value={blast.impacted_crons.length}
+            label={t("blast.crons")}
+          />
+        </div>
         <div style={s.viewToggle}>
           <Button
             kind={view === "tree" ? "secondary" : "ghost"}
@@ -257,33 +293,6 @@ export function BlastTab({
           >
             {t("blast.graphView")}
           </Button>
-        </div>
-      </div>
-
-      <div style={s.countRow}>
-        <div style={s.countItem}>
-          <span className="tnum" style={s.countValue}>
-            {blast.changed_symbols.length}
-          </span>
-          <span style={s.countLabel}>{t("blast.symbols")}</span>
-        </div>
-        <div style={s.countItem}>
-          <span className="tnum" style={s.countValue}>
-            {callerCount}
-          </span>
-          <span style={s.countLabel}>{t("blast.callers")}</span>
-        </div>
-        <div style={s.countItem}>
-          <span className="tnum" style={s.countValue}>
-            {blast.impacted_endpoints.length}
-          </span>
-          <span style={s.countLabel}>{t("blast.endpoints")}</span>
-        </div>
-        <div style={s.countItem}>
-          <span className="tnum" style={s.countValue}>
-            {blast.impacted_crons.length}
-          </span>
-          <span style={s.countLabel}>{t("blast.crons")}</span>
         </div>
       </div>
 

@@ -5,7 +5,7 @@
    `useIntent`/`useSmartDiff` query pattern (hooks/intent.ts, hooks/smart-diff.ts).
      GET /pulls/:id/prior-prs → PrHistory (other merged PRs touching the same
    files) — same free/deterministic shape, backs the "Prior PRs touching these
-   files" accordion inside BlastTab. */
+   files" accordion inside BlastPanel. */
 "use client";
 
 import { useQuery } from "@tanstack/react-query";

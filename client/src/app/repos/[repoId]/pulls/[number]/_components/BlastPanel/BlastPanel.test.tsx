@@ -82,7 +82,7 @@ vi.mock("@/lib/hooks/blast", () => ({
   usePriorPrs: () => ({ data: priorPrsData }),
 }));
 
-import { BlastTab } from "./BlastTab";
+import { BlastPanel } from "./BlastPanel";
 
 afterEach(() => {
   cleanup();
@@ -103,9 +103,9 @@ function renderWithIntl(ui: React.ReactElement) {
   );
 }
 
-describe("BlastTab", () => {
+describe("BlastPanel", () => {
   it("renders counts and a changed symbol's callers, expanding/collapsing on click", () => {
-    renderWithIntl(<BlastTab prId="pr1" repoId="repo1" repoFullName="acme/widgets" headSha="abc123" />);
+    renderWithIntl(<BlastPanel prId="pr1" repoId="repo1" repoFullName="acme/widgets" headSha="abc123" />);
 
     // Header counts: 1 symbol, 2 callers, 1 endpoint, 1 cron.
     expect(screen.getByText("Blast radius")).toBeInTheDocument();
@@ -133,7 +133,7 @@ describe("BlastTab", () => {
 
   it("shows a degraded badge with the reason and an empty state — never a blank screen — when the index has no symbols", () => {
     blastData = BLAST_DEGRADED;
-    renderWithIntl(<BlastTab prId="pr1" repoId="repo1" repoFullName="acme/widgets" headSha="abc123" />);
+    renderWithIntl(<BlastPanel prId="pr1" repoId="repo1" repoFullName="acme/widgets" headSha="abc123" />);
 
     expect(screen.getByText("The repo has not been indexed yet.")).toBeInTheDocument();
     expect(screen.getByText("No changed symbols detected")).toBeInTheDocument();
@@ -142,7 +142,7 @@ describe("BlastTab", () => {
 
   it("colors endpoint chips by parsing the METHOD prefix and shows an error state with working retry on failure", () => {
     const { rerender } = renderWithIntl(
-      <BlastTab prId="pr1" repoId="repo1" repoFullName="acme/widgets" headSha="abc123" />,
+      <BlastPanel prId="pr1" repoId="repo1" repoFullName="acme/widgets" headSha="abc123" />,
     );
     expect(screen.getByText("POST /api/checkout")).toBeInTheDocument();
 
@@ -153,7 +153,7 @@ describe("BlastTab", () => {
         locale="en"
         messages={{ prReview: prReviewMessages, common: commonMessages }}
       >
-        <BlastTab prId="pr1" repoId="repo1" repoFullName="acme/widgets" headSha="abc123" />
+        <BlastPanel prId="pr1" repoId="repo1" repoFullName="acme/widgets" headSha="abc123" />
       </NextIntlClientProvider>,
     );
 
@@ -167,20 +167,20 @@ describe("BlastTab", () => {
     // loader, not blow up. (Mock returns undefined data / no error.)
     blastData = undefined;
     blastError = false;
-    renderWithIntl(<BlastTab prId={null} repoId="repo1" repoFullName="acme/widgets" headSha="abc123" />);
+    renderWithIntl(<BlastPanel prId={null} repoId="repo1" repoFullName="acme/widgets" headSha="abc123" />);
     expect(screen.getByText(commonMessages.states.loading)).toBeInTheDocument();
   });
 
   it("falls back to the failed-index message in the degraded badge when index_status is 'failed' and reason is null", () => {
     blastData = BLAST_FAILED;
-    renderWithIntl(<BlastTab prId="pr1" repoId="repo1" repoFullName="acme/widgets" headSha="abc123" />);
+    renderWithIntl(<BlastPanel prId="pr1" repoId="repo1" repoFullName="acme/widgets" headSha="abc123" />);
     expect(screen.getByText(prReviewMessages.blast.indexStatus.failed)).toBeInTheDocument();
     // Still an honest empty state, never a blank screen.
     expect(screen.getByText("No changed symbols detected")).toBeInTheDocument();
   });
 
   it("renders caller rows as plain text (not links) when repoFullName/headSha are null", () => {
-    renderWithIntl(<BlastTab prId="pr1" repoId="repo1" repoFullName={null} headSha={null} />);
+    renderWithIntl(<BlastPanel prId="pr1" repoId="repo1" repoFullName={null} headSha={null} />);
     // The file:line still shows so the map isn't lost, just without a deep link.
     expect(screen.getByText("src/billing/checkout.ts:42")).toBeInTheDocument();
     expect(
@@ -191,7 +191,7 @@ describe("BlastTab", () => {
   describe("Prior PRs touching these files accordion", () => {
     it("expands to render prior-PR rows from usePriorPrs, most-recent first, each linking to its PR", () => {
       priorPrsData = PRIOR_PRS_SOME;
-      renderWithIntl(<BlastTab prId="pr1" repoId="repo1" repoFullName="acme/widgets" headSha="abc123" />);
+      renderWithIntl(<BlastPanel prId="pr1" repoId="repo1" repoFullName="acme/widgets" headSha="abc123" />);
 
       // Collapsed by default — rows not yet rendered.
       expect(screen.getByText("Prior PRs touching these files")).toBeInTheDocument();
@@ -210,7 +210,7 @@ describe("BlastTab", () => {
 
     it("shows a quiet empty state — no crash — when there are no prior PRs", () => {
       priorPrsData = PRIOR_PRS_EMPTY;
-      renderWithIntl(<BlastTab prId="pr1" repoId="repo1" repoFullName="acme/widgets" headSha="abc123" />);
+      renderWithIntl(<BlastPanel prId="pr1" repoId="repo1" repoFullName="acme/widgets" headSha="abc123" />);
 
       fireEvent.click(screen.getByText("Prior PRs touching these files"));
       expect(screen.getByText("No prior merged PRs touched these files.")).toBeInTheDocument();

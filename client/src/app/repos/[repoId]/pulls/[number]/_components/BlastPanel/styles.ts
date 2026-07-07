@@ -1,45 +1,42 @@
 import type { CSSProperties } from "react";
 
-/** Co-located styles for BlastTab. */
+/** Co-located styles for BlastPanel. */
 export const s = {
   root: {
     display: "flex",
     flexDirection: "column",
     gap: 18,
   } satisfies CSSProperties,
-  headerRow: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
-  } satisfies CSSProperties,
   viewToggle: {
     display: "flex",
     gap: 6,
   } satisfies CSSProperties,
-  countRow: {
+  /** Compact inline metrics (left) + Tree/Graph toggle (right), one row. */
+  metricsRow: {
     display: "flex",
-    gap: 24,
-    padding: "14px 16px",
-    background: "var(--bg-elevated)",
-    border: "1px solid var(--border)",
-    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    flexWrap: "wrap",
   } satisfies CSSProperties,
-  countItem: {
+  metrics: {
     display: "flex",
-    flexDirection: "column",
-    gap: 2,
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 16,
   } satisfies CSSProperties,
-  countValue: {
-    fontSize: 22,
+  metric: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 5,
+  } satisfies CSSProperties,
+  metricValue: {
+    fontSize: 14,
     fontWeight: 700,
     color: "var(--text-primary)",
   } satisfies CSSProperties,
-  countLabel: {
-    fontSize: 11,
-    fontWeight: 600,
-    letterSpacing: "0.05em",
-    textTransform: "uppercase",
+  metricLabel: {
+    fontSize: 13,
     color: "var(--text-muted)",
   } satisfies CSSProperties,
   degradedBanner: {

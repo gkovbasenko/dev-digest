@@ -237,9 +237,13 @@ export function BlastPanel({
     return <div style={s.empty}>{tc("states.loading")}</div>;
   }
 
-  const callerCount = blast.downstream.reduce((n, d) => n + d.callers.length, 0);
+  // Show only symbols with downstream callers — a changed symbol nothing else
+  // references has no blast radius, so it's noise in the impact map.
+  const impacted = blast.downstream.filter((d) => d.callers.length > 0);
+  const callerCount = impacted.reduce((n, d) => n + d.callers.length, 0);
   const degraded = blast.index_status !== "full" || blast.degraded;
-  const hasSymbols = blast.changed_symbols.length > 0;
+  const hasImpact = impacted.length > 0;
+  const hadChangedSymbols = blast.changed_symbols.length > 0;
   const statusMessage: Record<string, string> = {
     partial: t("blast.indexStatus.partial"),
     degraded: t("blast.indexStatus.degraded"),
@@ -255,7 +259,7 @@ export function BlastPanel({
         <div style={s.metrics}>
           <Metric
             icon={<Icon.Code size={13} style={{ color: "var(--text-muted)" }} />}
-            value={blast.changed_symbols.length}
+            value={impacted.length}
             label={t("blast.symbols")}
           />
           <Metric
@@ -305,9 +309,9 @@ export function BlastPanel({
 
       {view === "graph" ? (
         <div style={s.graphPlaceholder}>{t("blast.graphPlaceholder")}</div>
-      ) : hasSymbols ? (
+      ) : hasImpact ? (
         <div style={s.symbolList}>
-          {blast.downstream.map((impact) => (
+          {impacted.map((impact) => (
             <SymbolBlock
               key={impact.symbol}
               impact={impact}
@@ -316,6 +320,10 @@ export function BlastPanel({
             />
           ))}
         </div>
+      ) : hadChangedSymbols ? (
+        // Symbols changed, but none are referenced anywhere — an honest
+        // "no downstream impact" state, not "nothing changed".
+        <EmptyState icon="Boxes" title={t("blast.noImpactTitle")} body={t("blast.noImpactBody")} />
       ) : (
         <EmptyState icon="Boxes" title={t("blast.emptyTitle")} body={t("blast.emptyBody")} />
       )}

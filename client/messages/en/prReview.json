@@ -147,6 +147,8 @@
     },
     "emptyTitle": "No changed symbols detected",
     "emptyBody": "This PR's changes didn't map to any indexed symbols.",
+    "noImpactTitle": "No downstream callers",
+    "noImpactBody": "This PR's changed symbols aren't called anywhere in the indexed code.",
     "priorPrs": {
       "title": "Prior PRs touching these files",
       "count": "{count} PRs",

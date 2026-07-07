@@ -27,6 +27,43 @@ const BLAST_FULL = {
   reason: null,
 };
 
+// One changed symbol with callers + one with none: only the former is shown.
+const BLAST_MIXED = {
+  changed_symbols: [
+    { name: "processPayment", file: "src/billing/pay.ts", kind: "function" },
+    { name: "unusedHelper", file: "src/billing/util.ts", kind: "function" },
+  ],
+  downstream: [
+    {
+      symbol: "processPayment",
+      callers: [{ name: "checkout", file: "src/billing/checkout.ts", line: 42 }],
+      endpoints_affected: [],
+      crons_affected: [],
+    },
+    { symbol: "unusedHelper", callers: [], endpoints_affected: [], crons_affected: [] },
+  ],
+  impacted_endpoints: [],
+  impacted_crons: [],
+  summary: "",
+  index_status: "full" as const,
+  degraded: false,
+  reason: null,
+};
+
+// Changed symbols exist, but none are referenced anywhere (all 0 callers).
+const BLAST_NO_CALLERS = {
+  changed_symbols: [{ name: "unusedHelper", file: "src/billing/util.ts", kind: "function" }],
+  downstream: [
+    { symbol: "unusedHelper", callers: [], endpoints_affected: [], crons_affected: [] },
+  ],
+  impacted_endpoints: [],
+  impacted_crons: [],
+  summary: "",
+  index_status: "full" as const,
+  degraded: false,
+  reason: null,
+};
+
 const BLAST_DEGRADED = {
   changed_symbols: [],
   downstream: [],
@@ -129,6 +166,25 @@ describe("BlastPanel", () => {
     // Collapse the symbol block — callers disappear.
     fireEvent.click(screen.getByText("processPayment"));
     expect(screen.queryByText("src/billing/refund.ts:10")).not.toBeInTheDocument();
+  });
+
+  it("hides changed symbols that have no callers — only symbols with downstream impact are shown", () => {
+    blastData = BLAST_MIXED;
+    renderWithIntl(<BlastPanel prId="pr1" repoId="repo1" repoFullName="acme/widgets" headSha="abc123" />);
+
+    // The impacted symbol renders; the 0-caller one is filtered out.
+    expect(screen.getByText("processPayment")).toBeInTheDocument();
+    expect(screen.queryByText("unusedHelper")).not.toBeInTheDocument();
+  });
+
+  it("shows a 'no downstream callers' state — not 'nothing changed' — when every changed symbol has 0 callers", () => {
+    blastData = BLAST_NO_CALLERS;
+    renderWithIntl(<BlastPanel prId="pr1" repoId="repo1" repoFullName="acme/widgets" headSha="abc123" />);
+
+    expect(screen.getByText(prReviewMessages.blast.noImpactTitle)).toBeInTheDocument();
+    expect(screen.queryByText("unusedHelper")).not.toBeInTheDocument();
+    // Not the generic "no changed symbols" empty state.
+    expect(screen.queryByText(prReviewMessages.blast.emptyTitle)).not.toBeInTheDocument();
   });
 
   it("shows a degraded badge with the reason and an empty state — never a blank screen — when the index has no symbols", () => {

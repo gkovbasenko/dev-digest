@@ -6,9 +6,26 @@
 
 import React from "react";
 import { useTranslations } from "next-intl";
-import { Card, SectionLabel, Badge, Button } from "@devdigest/ui";
+import { Card, SectionLabel, Icon, Button } from "@devdigest/ui";
 import { useIntent, useRecomputeIntent } from "@/lib/hooks/intent";
 import { s } from "./styles";
+
+/** Scope items are full sentences, not tags — render them as a wrapping ✓/✗
+    checklist (a nowrap Badge overflows the column into the Blast panel). */
+function ScopeList({ items, kind }: { items: string[]; kind: "in" | "out" }) {
+  const Glyph = kind === "in" ? Icon.CheckCircle : Icon.XCircle;
+  const color = kind === "in" ? "var(--ok)" : "var(--text-muted)";
+  return (
+    <ul style={s.scopeList}>
+      {items.map((item, i) => (
+        <li key={i} style={s.scopeItem}>
+          <Glyph size={14} style={{ color, flexShrink: 0, marginTop: 2 }} />
+          <span style={s.scopeText}>{item}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 export function IntentCard({ prId }: { prId: string | number | null | undefined }) {
   const t = useTranslations("prReview");
@@ -45,23 +62,13 @@ export function IntentCard({ prId }: { prId: string | number | null | undefined 
             {intent.in_scope.length > 0 && (
               <div>
                 <div style={s.label}>{t("intent.inScope")}</div>
-                <div style={s.chipRow}>
-                  {intent.in_scope.map((item, i) => (
-                    <Badge key={i}>{item}</Badge>
-                  ))}
-                </div>
+                <ScopeList items={intent.in_scope} kind="in" />
               </div>
             )}
             {intent.out_of_scope.length > 0 && (
               <div>
                 <div style={s.label}>{t("intent.outOfScope")}</div>
-                <div style={s.chipRow}>
-                  {intent.out_of_scope.map((item, i) => (
-                    <Badge key={i} color="var(--text-muted)">
-                      {item}
-                    </Badge>
-                  ))}
-                </div>
+                <ScopeList items={intent.out_of_scope} kind="out" />
               </div>
             )}
           </div>

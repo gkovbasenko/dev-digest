@@ -91,7 +91,9 @@ npm install
   (graceful timeout fallback if the run is still in progress)
 - `dev_digest_get_findings` — aggregated open findings for a PR
 - `dev_digest_get_conventions` — accepted/candidate coding conventions for a repo
-- `dev_digest_get_blast_radius` — **stub** for now (`{ status: 'not_implemented', hint }`)
+- `dev_digest_get_blast_radius` — changed symbols/callers/impacted endpoints & crons for a PR,
+  read from the repo-intel index (`GET /pulls/:id/blast`); degraded/partial index passed through,
+  `downstream[]`/`callers[]` capped for response size
 
 ## TODO / Known limitations
 
@@ -106,8 +108,6 @@ npm install
   size.** There is no top-N limit or truncation, so a PR with hundreds of findings dumps the
   entire list into the chat context. Cap it to top-N by severity with a `+N more` marker
   (mirroring the PR-list popover already in `server/`), optionally via a `limit` arg.
-- [ ] `dev_digest_get_blast_radius` is a stub (`{ status: 'not_implemented' }`) — implement once
-  the server exposes the blast-radius endpoint (plan L04).
 - [ ] `GET /repos/:id/pulls` does a live GitHub sync per call, making PR-number resolution slow —
   optional server-side lookup endpoint deferred (plan T6).
 

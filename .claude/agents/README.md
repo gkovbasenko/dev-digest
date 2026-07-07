@@ -145,3 +145,11 @@ Writes and maintains documentation: describing built features, turning implement
 | **e2e/** | typescript-expert |
 
 Engineering insights reach the agents by **both** paths: the implementation-planner surfaces cross-cutting insights into the plan, and each implementer reads its own module's `INSIGHTS.md` on-site before coding.
+
+---
+
+## Security: write-path guard (`.claude/hooks/guard-write-path.mjs`)
+
+The Write-capable agents (`spec-creator` → `specs/`, `implementation-planner` → `docs/plans/`) enforce their write boundary by **prompt only** — a prompt-injected agent could ignore it. A `PreToolUse` hook on `Write|Edit` (wired in `.claude/settings.json`) is the tool-level backstop: it blocks writes to a **deny-list** of protected paths (`.git/` internals, `~/.ssh`, `~/.aws`, `~/.gnupg`, shell rc files, `.env*`, `.claude/settings*`) and exits non-zero to reject the call. Tested by `guard-write-path.test.mjs` (`node --test .claude/hooks/guard-write-path.test.mjs`).
+
+**Deliberate trade-off — it's a deny-list, not a repo-jail.** Hooks fire for *every* agent's tool calls and can't be scoped per-agent, so a strict "only `specs/` + `docs/plans/`" allow-list would break `implementer` / `doc-writer` / `test-writer`, which legitimately write across the repo. The guard therefore protects the crown jewels (credentials, git, settings) with zero false positives, but does **not** stop a hijacked agent from overwriting an ordinary in-repo source file. The parse path **fails open** on purpose: its stdin comes from the trusted Claude Code harness, not untrusted content, so a malformed payload means a broken harness — not an attack — and failing closed would wedge every write in the session.

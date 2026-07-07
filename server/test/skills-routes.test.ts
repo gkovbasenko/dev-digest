@@ -80,4 +80,40 @@ describe('skills routes (no DB)', () => {
     expect(res.statusCode).toBe(422);
     await app.close();
   });
+
+  it('GET /skills/:id/versions → 422 for a non-UUID id (never reaches the DB)', async () => {
+    const app = await buildApp({ config });
+    const res = await app.inject({ method: 'GET', url: '/skills/not-a-uuid/versions' });
+    expect(res.statusCode).toBe(422);
+    await app.close();
+  });
+
+  it('GET /skills/:id/stats → 422 for a non-UUID id (never reaches the DB)', async () => {
+    const app = await buildApp({ config });
+    const res = await app.inject({ method: 'GET', url: '/skills/not-a-uuid/stats' });
+    expect(res.statusCode).toBe(422);
+    await app.close();
+  });
+
+  it('POST /skills/:id/restore → 422 when version is missing from the body', async () => {
+    const app = await buildApp({ config });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/skills/00000000-0000-0000-0000-000000000000/restore',
+      payload: {},
+    });
+    expect(res.statusCode).toBe(422);
+    await app.close();
+  });
+
+  it('POST /skills/:id/restore → 422 when version is not an integer', async () => {
+    const app = await buildApp({ config });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/skills/00000000-0000-0000-0000-000000000000/restore',
+      payload: { version: 'one' },
+    });
+    expect(res.statusCode).toBe(422);
+    await app.close();
+  });
 });

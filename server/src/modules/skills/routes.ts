@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { SkillType, CommunitySkill } from '@devdigest/shared';
+import { SkillType, CommunitySkill, SkillVersion, SkillStats } from '@devdigest/shared';
 import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
 import { NotFoundError } from '../../platform/errors.js';
@@ -16,6 +16,9 @@ import { SkillsService } from './service.js';
  *   GET    /skills/:id            → one skill
  *   PUT    /skills/:id            → update (body change bumps version)
  *   DELETE /skills/:id            → delete
+ *   GET    /skills/:id/versions   → version history (DESC)
+ *   GET    /skills/:id/stats      → usage stats (agents, versions, run usage)
+ *   POST   /skills/:id/restore    → restore an old version's body as a new version
  *
  * IMPORTANT: /skills/import and /skills/community are registered BEFORE /skills/:id
  * so Fastify does not attempt to match "import"/"community" as UUID params.
@@ -35,6 +38,10 @@ const UpdateSkillBody = z.object({
   type: SkillType.optional(),
   body: z.string().optional(),
   enabled: z.boolean().optional(),
+});
+
+const RestoreSkillBody = z.object({
+  version: z.number().int(),
 });
 
 const ImportSkillBody = z
@@ -109,4 +116,35 @@ export default async function skillsRoutes(appBase: FastifyInstance) {
     if (!ok) throw new NotFoundError('Skill not found');
     return { ok: true };
   });
+
+  app.get(
+    '/skills/:id/versions',
+    { schema: { params: IdParams, response: { 200: z.array(SkillVersion) } } },
+    async (req) => {
+      const { workspaceId } = await getContext(app.container, req);
+      return service.listVersions(workspaceId, req.params.id);
+    },
+  );
+
+  app.get(
+    '/skills/:id/stats',
+    { schema: { params: IdParams, response: { 200: SkillStats } } },
+    async (req) => {
+      const { workspaceId } = await getContext(app.container, req);
+      const stats = await service.getStats(workspaceId, req.params.id);
+      if (!stats) throw new NotFoundError('Skill not found');
+      return stats;
+    },
+  );
+
+  app.post(
+    '/skills/:id/restore',
+    { schema: { params: IdParams, body: RestoreSkillBody } },
+    async (req) => {
+      const { workspaceId } = await getContext(app.container, req);
+      const skill = await service.restore(workspaceId, req.params.id, req.body.version);
+      if (!skill) throw new NotFoundError('Skill not found');
+      return skill;
+    },
+  );
 }

@@ -99,6 +99,13 @@
       "when": 1783015549270,
       "tag": "0013_handy_moonstone",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1783438311288,
+      "tag": "0014_dazzling_synch",
+      "breakpoints": true
     }
   ]
 }

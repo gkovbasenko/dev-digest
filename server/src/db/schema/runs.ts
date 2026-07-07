@@ -1,7 +1,9 @@
-import { pgTable, uuid, text, integer, jsonb, timestamp } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, integer, jsonb, timestamp, primaryKey } from 'drizzle-orm/pg-core';
+import { now } from './_shared';
 import { workspaces } from './core';
 import { agents } from './agents';
 import { pullRequests } from './pulls';
+import { skills } from './skills';
 
 // ============================================================ Observability
 
@@ -37,6 +39,22 @@ export const runTraces = pgTable('run_traces', {
     .references(() => agentRuns.id, { onDelete: 'cascade' }),
   trace: jsonb('trace').notNull(),
 });
+
+/** Join table: which skills fed a given agent review run (for run-usage stats + audit trail). */
+export const runSkills = pgTable(
+  'run_skills',
+  {
+    runId: uuid('run_id')
+      .notNull()
+      .references(() => agentRuns.id, { onDelete: 'cascade' }),
+    skillId: uuid('skill_id')
+      .notNull()
+      .references(() => skills.id, { onDelete: 'cascade' }),
+    version: integer('version').notNull(),
+    createdAt: now(),
+  },
+  (t) => ({ pk: primaryKey({ columns: [t.runId, t.skillId] }) }),
+);
 
 export const multiAgentRuns = pgTable('multi_agent_runs', {
   id: uuid('id').primaryKey().defaultRandom(),

@@ -219,6 +219,16 @@ d('Skill versions, restore, and stats', () => {
     await app.close();
   });
 
+  it('versions 404s for a skill id that never existed', async () => {
+    const app = await makeApp();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/skills/00000000-0000-0000-0000-000000000000/versions',
+    });
+    expect(res.statusCode).toBe(404);
+    await app.close();
+  });
+
   it('versions, stats, and restore are workspace-scoped: another tenant is denied', async () => {
     const { db } = pg.handle;
     const [otherWs] = await db.insert(t.workspaces).values({ name: 'other-skills-ws' }).returning();
@@ -237,9 +247,10 @@ d('Skill versions, restore, and stats', () => {
       .from(t.workspaces)
       .where(eq(t.workspaces.name, 'default'));
 
-    // Owner workspace can read; the default workspace is denied.
+    // Owner workspace can read; the default workspace is denied (undefined →
+    // 404 at the route, not an empty list that masks a cross-tenant skill).
     expect(await service.listVersions(otherWs!.id, foreign.id)).toHaveLength(1);
-    expect(await service.listVersions(defaultWs!, foreign.id)).toEqual([]);
+    expect(await service.listVersions(defaultWs!, foreign.id)).toBeUndefined();
     expect(await service.getStats(otherWs!.id, foreign.id)).toBeDefined();
     expect(await service.getStats(defaultWs!, foreign.id)).toBeUndefined();
     expect(await service.restore(defaultWs!, foreign.id, 1)).toBeUndefined();

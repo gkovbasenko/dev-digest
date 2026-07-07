@@ -53,9 +53,12 @@ export class SkillsRepository {
     return row;
   }
 
-  async listVersions(workspaceId: string, id: string): Promise<SkillVersionRow[]> {
+  // Returns undefined (→ 404) when the skill isn't in the workspace, distinct
+  // from [] which would only ever mean "owned skill with no version rows" (not
+  // reachable — every skill snapshots v1 on insert).
+  async listVersions(workspaceId: string, id: string): Promise<SkillVersionRow[] | undefined> {
     const skill = await this.getById(workspaceId, id);
-    if (!skill) return [];
+    if (!skill) return undefined;
     return this.db
       .select()
       .from(t.skillVersions)
@@ -63,11 +66,25 @@ export class SkillsRepository {
       .orderBy(desc(t.skillVersions.version));
   }
 
-  async getVersionBody(id: string, version: number): Promise<string | undefined> {
+  // Workspace-scoped by construction (join to skills) so it can't read a
+  // version body from another workspace's skill — the containment is enforced
+  // here, not left to the caller (restore) to re-check downstream.
+  async getVersionBody(
+    workspaceId: string,
+    id: string,
+    version: number,
+  ): Promise<string | undefined> {
     const [row] = await this.db
       .select({ body: t.skillVersions.body })
       .from(t.skillVersions)
-      .where(and(eq(t.skillVersions.skillId, id), eq(t.skillVersions.version, version)));
+      .innerJoin(t.skills, eq(t.skills.id, t.skillVersions.skillId))
+      .where(
+        and(
+          eq(t.skillVersions.skillId, id),
+          eq(t.skillVersions.version, version),
+          eq(t.skills.workspaceId, workspaceId),
+        ),
+      );
     return row?.body;
   }
 

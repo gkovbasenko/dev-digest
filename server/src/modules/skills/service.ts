@@ -105,9 +105,9 @@ export class SkillsService {
     return this.repo.deleteById(workspaceId, id);
   }
 
-  async listVersions(workspaceId: string, id: string): Promise<SkillVersion[]> {
+  async listVersions(workspaceId: string, id: string): Promise<SkillVersion[] | undefined> {
     const rows = await this.repo.listVersions(workspaceId, id);
-    return rows.map(toSkillVersionDto);
+    return rows ? rows.map(toSkillVersionDto) : undefined;
   }
 
   async getStats(workspaceId: string, id: string): Promise<SkillStats | undefined> {
@@ -129,7 +129,7 @@ export class SkillsService {
   // at v5 writes a NEW version (v6) whose body equals v1's — history is never
   // rewritten, only appended to.
   async restore(workspaceId: string, id: string, version: number): Promise<Skill | undefined> {
-    const body = await this.repo.getVersionBody(id, version);
+    const body = await this.repo.getVersionBody(workspaceId, id, version);
     if (body === undefined) return undefined;
     const row = await this.repo.update(workspaceId, id, { body });
     return row ? toSkillDto(row) : undefined;

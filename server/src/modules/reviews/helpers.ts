@@ -4,6 +4,7 @@
  */
 import type { Finding } from '@devdigest/shared';
 import type { FindingRow, PullRow, ReviewRow } from './repository.js';
+import { UNTRUSTED_SKILL_START, UNTRUSTED_SKILL_END } from '../skills/constants.js';
 
 // reduceReviews + sliceDiff live in @devdigest/reviewer-core (pure engine logic
 // shared with the CI runner); re-exported here for backward-compatible imports.
@@ -71,6 +72,34 @@ export function reviewToDto(
     created_at: review.createdAt.toISOString(),
     findings: findings.map(findingRowToDto),
   };
+}
+
+/**
+ * Strip the skills module's "needs vetting" HTML-comment markers
+ * (`UNTRUSTED_SKILL_START`/`END`) from a skill body before it reaches the
+ * review prompt's `skills` slot.
+ *
+ * `assemblePrompt`'s `skills` param is the one prompt input the
+ * `INJECTION_GUARD` does NOT delimiter-wrap (see server/INSIGHTS.md, 2026-07-01
+ * — `assemblePrompt`'s `skills` param is NOT delimiter-wrapped). Only
+ * `enabled: true` skills ever reach here (enforced in the repository's SQL
+ * filter), and `enabled` is the human-vetting gate — so the markers are
+ * stripped (trusted now), never re-wrapped.
+ */
+export function stripUntrustedMarkers(body: string): string {
+  // Reverse of the import wrapper `wrapUntrusted` (`${START}\n<body>\n${END}`):
+  // remove the vetting markers ONLY where they wrap the body at its boundaries.
+  // Anchored (not a global replace) so a marker string that legitimately
+  // appears *inside* a body is preserved rather than silently deleted — the
+  // old split/join stripped every occurrence and could mangle real content.
+  let s = body.trim();
+  if (s.startsWith(UNTRUSTED_SKILL_START)) {
+    s = s.slice(UNTRUSTED_SKILL_START.length);
+  }
+  if (s.endsWith(UNTRUSTED_SKILL_END)) {
+    s = s.slice(0, s.length - UNTRUSTED_SKILL_END.length);
+  }
+  return s.trim();
 }
 
 /**

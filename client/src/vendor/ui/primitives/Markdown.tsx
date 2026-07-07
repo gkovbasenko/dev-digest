@@ -1,14 +1,19 @@
 import React from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import rehypeSanitize from "rehype-sanitize";
 
-// react-markdown (without the rehype-raw plugin, which this project doesn't
-// use) never renders raw HTML from the source — <script>, <img onerror>, etc.
-// are escaped as literal text. But it does pass link hrefs straight through
-// to a real <a> tag, and doesn't strip dangerous URL schemes on its own — a
-// javascript: link would still execute on click. Since this renders
-// untrusted content (imported skill bodies), only allow the schemes an
-// inline link legitimately needs.
+// This renders untrusted content (imported/extracted skill bodies), so HTML is
+// sanitized at the AST level via rehype-sanitize (default GitHub allowlist) —
+// an EXPLICIT, enforced boundary rather than relying on the incidental fact
+// that rehype-raw isn't installed. If a future change ever adds rehype-raw to
+// render raw HTML, sanitize still strips <script>/<img onerror>/event handlers
+// and unsafe URL schemes instead of executing them.
+//
+// safeHref is kept as a second, independent layer on link hrefs: it also
+// covers relative/fragment resolution and normalizes leading whitespace/case
+// so "  JavaScript:..." can't sneak past. Only allow the schemes an inline
+// link legitimately needs.
 function safeHref(href: string | undefined): string | undefined {
   if (!href) return undefined;
   // A base is always supplied so relative/fragment links (e.g. "docs/x.md",
@@ -29,6 +34,7 @@ export function Markdown({ children }: { children?: string | null }) {
     <div className="dd-md" style={{ fontSize: "inherit", lineHeight: 1.55 }}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeSanitize]}
         components={{
           p: ({ children }) => <p style={{ margin: "0 0 10px" }}>{children}</p>,
           strong: ({ children }) => (

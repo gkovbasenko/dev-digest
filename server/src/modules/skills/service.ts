@@ -1,9 +1,9 @@
 import type { Container } from '../../platform/container.js';
-import type { Skill, SkillType, SkillSource } from '@devdigest/shared';
+import type { Skill, SkillType, SkillSource, SkillVersion, SkillStats } from '@devdigest/shared';
 import { SkillsRepository } from './repository.js';
 import { fetchSkillUrl } from './fetch-skill.js';
 import { UNTRUSTED_SKILL_START, UNTRUSTED_SKILL_END } from './constants.js';
-import type { SkillRow } from '../../db/rows.js';
+import type { SkillRow, SkillVersionRow } from '../../db/rows.js';
 
 export interface CreateSkillInput {
   name: string;
@@ -54,6 +54,14 @@ function extractNameFromBody(body: string): string | undefined {
   return match?.[1]?.trim();
 }
 
+function toSkillVersionDto(row: SkillVersionRow): SkillVersion {
+  return {
+    version: row.version,
+    body: row.body,
+    created_at: row.createdAt.toISOString(),
+  };
+}
+
 export class SkillsService {
   private repo: SkillsRepository;
 
@@ -95,6 +103,36 @@ export class SkillsService {
 
   async delete(workspaceId: string, id: string): Promise<boolean> {
     return this.repo.deleteById(workspaceId, id);
+  }
+
+  async listVersions(workspaceId: string, id: string): Promise<SkillVersion[] | undefined> {
+    const rows = await this.repo.listVersions(workspaceId, id);
+    return rows ? rows.map(toSkillVersionDto) : undefined;
+  }
+
+  async getStats(workspaceId: string, id: string): Promise<SkillStats | undefined> {
+    const stats = await this.repo.getStats(workspaceId, id);
+    if (!stats) return undefined;
+    return {
+      agent_count: stats.agentCount,
+      version_count: stats.versionCount,
+      run_usage_count: stats.runUsageCount,
+      last_used_at: stats.lastUsedAt ? stats.lastUsedAt.toISOString() : null,
+      source: stats.source,
+      created_at: stats.createdAt.toISOString(),
+    };
+  }
+
+  // Restoring an old version reuses SkillsRepository.update() rather than
+  // reimplementing the version-bump / concurrency-safe path (see
+  // server/INSIGHTS.md 2026-07-01 — SELECT ... FOR UPDATE). Restoring v1 while
+  // at v5 writes a NEW version (v6) whose body equals v1's — history is never
+  // rewritten, only appended to.
+  async restore(workspaceId: string, id: string, version: number): Promise<Skill | undefined> {
+    const body = await this.repo.getVersionBody(workspaceId, id, version);
+    if (body === undefined) return undefined;
+    const row = await this.repo.update(workspaceId, id, { body });
+    return row ? toSkillDto(row) : undefined;
   }
 
   async import(workspaceId: string, input: ImportSkillInput): Promise<Skill> {

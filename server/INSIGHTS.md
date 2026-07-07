@@ -5,6 +5,18 @@ Newest first. See `.claude/skills/engineering-insights/SKILL.md` for what belong
 
 ---
 
+## 2026-07-07 — Running dev-digest reviewers on a branch that adds a table fails until you `pnpm db:migrate` the compose `devdigest` DB
+
+The dev-digest app reviews PRs by executing its own running server code against its own DB (compose PG, database `devdigest`, `DATABASE_URL` in `server/.env`). So when a feature branch adds a migration (e.g. `run_skills`) and `pnpm dev` is running that branch's code, `dev_digest_run_review` fails with `relation "<table>" does not exist` until the migration is applied to the `devdigest` DB — running the new `.it.test.ts` against throwaway `it_*` databases does NOT migrate `devdigest`. Fix: `cd server && pnpm db:migrate` (reads `.env`, applies pending migrations to `devdigest`; the `schema "drizzle" already exists` / `__drizzle_migrations already exists` NOTICEs are benign). The failures can be intermittent across agents in one batch (some agent runs don't hit the new table's code path), so a partial "some reviewers passed" result is still the same root cause.
+
+**Evidence:** this session (2026-07-07) — PR #16 reviews for General + API Contract agents failed with `relation "run_skills" does not exist`; `SELECT to_regclass('public.run_skills')` returned empty on `devdigest` until `pnpm db:migrate`, after which the retried reviews succeeded.
+
+## 2026-07-07 — Skills ARE now wired into the review prompt; `run-executor` strips `UNTRUSTED_SKILL_*` markers and passes only `enabled` skills
+
+Supersedes the "no code reads skills into a review run" half of the 2026-07-01 `assemblePrompt` insight below. `run-executor.ts`'s `runOneAgent` now loads `ReviewRepository.getEnabledAgentSkills(agent.id)` (join `agent_skills`→`skills` WHERE `enabled=true`, ordered by `order`), runs each body through `stripUntrustedMarkers()` (`reviews/helpers.ts`), and passes them as `reviewPullRequest({ skills })` (omit-when-empty, like `callers`/`repoMap`). Consumed skills are recorded into the new `run_skills` join (`recordRunSkills`) for the stats query + audit trail. The chosen boundary is **strip-on-enable = trust**: `enabled` is the human vetting gate, so markers are stripped rather than re-wrapped. The still-true residual from the older note: `reviewer-core`'s `parts.skills` is STILL not `wrapUntrusted()`-wrapped, so never feed a non-enabled or marker-wrapped body straight into it.
+
+**Evidence:** `server/src/modules/reviews/run-executor.ts` (`runOneAgent`: `getEnabledAgentSkills` → `stripUntrustedMarkers` → `reviewPullRequest({ skills })`, then `recordRunSkills` after `insertReview`), `server/src/modules/reviews/helpers.ts` (`stripUntrustedMarkers`), `server/src/modules/reviews/repository/skills.repo.ts`, `server/test/reviews-skills.it.test.ts`; this session (2026-07-07).
+
 ## 2026-07-06 — The `pulls` module has NO service/repository layer — routes hit `container.db` directly (skill table is aspirational)
 
 The `server-architecture` skill's module table lists `pulls` with "repository ✓", but the module folder is only `helpers.ts`, `routes.ts`, `status.ts` — no `service.ts`, no `repository.ts`. `pulls/routes.ts` queries `container.db` **directly** (~22 call sites), and the existing `GET /repos/:id/pulls` is a "fat" route doing DB + GitHub sync inline. So when ADDING a read route to `pulls` (e.g. a persisted-only `pr number → prId` lookup), mirror this pattern — direct `container.db` read in the route, no GitHub adapter call — rather than inventing a lone repository/service layer, which would break the module's consistency. The onion route→db dependency rule is still honored either way.

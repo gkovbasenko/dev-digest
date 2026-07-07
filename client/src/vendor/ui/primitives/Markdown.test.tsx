@@ -5,15 +5,15 @@ import { Markdown } from "./Markdown";
 afterEach(cleanup);
 
 /**
- * Markdown renders untrusted content (imported skill bodies). Two distinct
- * safety properties matter here:
- *  - react-markdown (no rehype-raw) never renders raw HTML from the source —
- *    covered by the "does not render" tests below.
- *  - Link hrefs are NOT sanitized by react-markdown itself, so a
- *    javascript:/data: scheme link would still execute on click — that's
- *    handled by this component's own safeHref, covered separately.
+ * Markdown renders untrusted content (imported/extracted skill bodies). Two
+ * distinct safety properties matter here:
+ *  - Raw HTML in the source is never rendered as live DOM — now enforced
+ *    explicitly by rehype-sanitize (AST allowlist), not just by the absence of
+ *    rehype-raw. Covered by the "does not render" tests below.
+ *  - Link hrefs are additionally passed through this component's own safeHref
+ *    (relative/fragment resolution + scheme allowlist), covered separately.
  */
-describe("Markdown — raw HTML is never rendered (no rehype-raw plugin)", () => {
+describe("Markdown — raw HTML is never rendered (rehype-sanitize)", () => {
   it("renders a <script> tag in the source as literal escaped text, not an executable script", () => {
     render(<Markdown>{"before <script>window.__pwned = true</script> after"}</Markdown>);
     expect(document.querySelector("script")).not.toBeInTheDocument();
@@ -24,6 +24,20 @@ describe("Markdown — raw HTML is never rendered (no rehype-raw plugin)", () =>
     render(<Markdown>{'<img src=x onerror="window.__pwned = true">'}</Markdown>);
     const img = document.querySelector("img");
     expect(img).not.toBeInTheDocument();
+  });
+});
+
+describe("Markdown — legitimate content still renders after sanitization", () => {
+  it("renders bold, inline code, and a GFM table (sanitize does not strip normal markdown)", () => {
+    render(
+      <Markdown>
+        {"**bold** and `code`\n\n| a | b |\n| - | - |\n| 1 | 2 |"}
+      </Markdown>,
+    );
+    expect(screen.getByText("bold")).toBeInTheDocument();
+    expect(screen.getByText("code")).toBeInTheDocument();
+    expect(screen.getByRole("table")).toBeInTheDocument();
+    expect(screen.getByRole("cell", { name: "1" })).toBeInTheDocument();
   });
 });
 

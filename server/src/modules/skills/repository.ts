@@ -1,11 +1,20 @@
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, count, desc, eq, max } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 import type { SkillType, SkillSource } from '@devdigest/shared';
 import { INITIAL_SKILL_VERSION } from './constants.js';
 
 export type { SkillRow, SkillVersionRow } from '../../db/rows.js';
-import type { SkillRow } from '../../db/rows.js';
+import type { SkillRow, SkillVersionRow } from '../../db/rows.js';
+
+export interface SkillStatsRow {
+  agentCount: number;
+  versionCount: number;
+  runUsageCount: number;
+  lastUsedAt: Date | null;
+  source: SkillSource;
+  createdAt: Date;
+}
 
 export interface InsertSkill {
   workspaceId: string;
@@ -42,6 +51,70 @@ export class SkillsRepository {
       .from(t.skills)
       .where(and(eq(t.skills.workspaceId, workspaceId), eq(t.skills.id, id)));
     return row;
+  }
+
+  // Returns undefined (→ 404) when the skill isn't in the workspace, distinct
+  // from [] which would only ever mean "owned skill with no version rows" (not
+  // reachable — every skill snapshots v1 on insert).
+  async listVersions(workspaceId: string, id: string): Promise<SkillVersionRow[] | undefined> {
+    const skill = await this.getById(workspaceId, id);
+    if (!skill) return undefined;
+    return this.db
+      .select()
+      .from(t.skillVersions)
+      .where(eq(t.skillVersions.skillId, id))
+      .orderBy(desc(t.skillVersions.version));
+  }
+
+  // Workspace-scoped by construction (join to skills) so it can't read a
+  // version body from another workspace's skill — the containment is enforced
+  // here, not left to the caller (restore) to re-check downstream.
+  async getVersionBody(
+    workspaceId: string,
+    id: string,
+    version: number,
+  ): Promise<string | undefined> {
+    const [row] = await this.db
+      .select({ body: t.skillVersions.body })
+      .from(t.skillVersions)
+      .innerJoin(t.skills, eq(t.skills.id, t.skillVersions.skillId))
+      .where(
+        and(
+          eq(t.skillVersions.skillId, id),
+          eq(t.skillVersions.version, version),
+          eq(t.skills.workspaceId, workspaceId),
+        ),
+      );
+    return row?.body;
+  }
+
+  async getStats(workspaceId: string, id: string): Promise<SkillStatsRow | undefined> {
+    const skill = await this.getById(workspaceId, id);
+    if (!skill) return undefined;
+
+    const [[agentRow], [versionRow], [runRow]] = await Promise.all([
+      this.db
+        .select({ count: count() })
+        .from(t.agentSkills)
+        .where(eq(t.agentSkills.skillId, id)),
+      this.db
+        .select({ count: count() })
+        .from(t.skillVersions)
+        .where(eq(t.skillVersions.skillId, id)),
+      this.db
+        .select({ count: count(), lastUsedAt: max(t.runSkills.createdAt) })
+        .from(t.runSkills)
+        .where(eq(t.runSkills.skillId, id)),
+    ]);
+
+    return {
+      agentCount: agentRow?.count ?? 0,
+      versionCount: versionRow?.count ?? 0,
+      runUsageCount: runRow?.count ?? 0,
+      lastUsedAt: runRow?.lastUsedAt ?? null,
+      source: skill.source as SkillSource,
+      createdAt: skill.createdAt,
+    };
   }
 
   async insert(values: InsertSkill): Promise<SkillRow> {

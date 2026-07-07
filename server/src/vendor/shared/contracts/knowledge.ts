@@ -140,6 +140,23 @@ export const CommunitySkill = z.object({
 });
 export type CommunitySkill = z.infer<typeof CommunitySkill>;
 
+export const SkillVersion = z.object({
+  version: z.number().int(),
+  body: z.string(),
+  created_at: z.string(),
+});
+export type SkillVersion = z.infer<typeof SkillVersion>;
+
+export const SkillStats = z.object({
+  agent_count: z.number().int(),
+  version_count: z.number().int(),
+  run_usage_count: z.number().int(),
+  last_used_at: z.string().nullable(),
+  source: SkillSource,
+  created_at: z.string(),
+});
+export type SkillStats = z.infer<typeof SkillStats>;
+
 // ---- Conventions ----
 export const ConventionCategory = z.enum([
   'naming',

@@ -2,35 +2,21 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import type { Skill } from "@devdigest/shared";
 
-const {
-  mockRouterReplace,
-  mockSearchParams,
-  mockSkills,
-  mockIsLoading,
-  mockSelectedSkill,
-  mockDeleteSkillMutate,
-} = vi.hoisted(() => ({
-  mockRouterReplace: vi.fn(),
-  mockSearchParams: { current: new URLSearchParams() },
+const { mockRouterPush, mockSkills, mockIsLoading } = vi.hoisted(() => ({
+  mockRouterPush: vi.fn(),
   mockSkills: { current: [] as Skill[] },
   mockIsLoading: { current: false },
-  mockSelectedSkill: { current: undefined as Skill | undefined },
-  mockDeleteSkillMutate: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ replace: mockRouterReplace, push: vi.fn() }),
-  useSearchParams: () => mockSearchParams.current,
+  useRouter: () => ({ push: mockRouterPush, replace: vi.fn() }),
 }));
 
-// SkillsView renders SkillListItem, SkillPreview, AddSkillDrawer, and
-// CreateSkillModal for real (not mocked) — so every hook any of them use
-// from lib/hooks/skills must be covered here.
+// SkillsView renders AddSkillDrawer and CreateSkillModal for real (not
+// mocked) — so every hook they use from lib/hooks/skills must be covered
+// here.
 vi.mock("../../../../lib/hooks/skills", () => ({
   useSkills: () => ({ data: mockSkills.current, isLoading: mockIsLoading.current }),
-  useSkill: () => ({ data: mockSelectedSkill.current }),
-  useUpdateSkill: () => ({ mutate: vi.fn(), isPending: false }),
-  useDeleteSkill: () => ({ mutate: mockDeleteSkillMutate, isPending: false }),
   useImportSkill: () => ({ mutate: vi.fn(), isPending: false }),
   useCreateSkill: () => ({ mutate: vi.fn(), isPending: false }),
 }));
@@ -47,12 +33,9 @@ import { SkillsView } from "./SkillsView";
 
 afterEach(() => {
   cleanup();
-  mockRouterReplace.mockReset();
-  mockSearchParams.current = new URLSearchParams();
+  mockRouterPush.mockReset();
   mockSkills.current = [];
   mockIsLoading.current = false;
-  mockSelectedSkill.current = undefined;
-  mockDeleteSkillMutate.mockReset();
 });
 
 const SKILL_A: Skill = {
@@ -82,7 +65,7 @@ describe("SkillsView", () => {
     expect(screen.getByText("No skills yet")).toBeInTheDocument();
   });
 
-  it("lists skills and shows the 'select a skill' placeholder when none is selected", () => {
+  it("lists skills and shows the 'select a skill' placeholder", () => {
     mockSkills.current = [SKILL_A, SKILL_B];
     render(<SkillsView />);
     expect(screen.getByText("Skill A")).toBeInTheDocument();
@@ -90,40 +73,11 @@ describe("SkillsView", () => {
     expect(screen.getByText("Select a skill")).toBeInTheDocument();
   });
 
-  it("clicking a skill row navigates by setting ?selected=<id> via router.replace", () => {
+  it("clicking a skill row navigates to its dedicated /skills/:id route", () => {
     mockSkills.current = [SKILL_A, SKILL_B];
     render(<SkillsView />);
     fireEvent.click(screen.getByText("Skill B"));
-    expect(mockRouterReplace).toHaveBeenCalledWith("/skills?selected=sk-b");
-  });
-
-  it("shows the SkillPreview for the skill matching ?selected=", () => {
-    mockSkills.current = [SKILL_A, SKILL_B];
-    mockSearchParams.current = new URLSearchParams("selected=sk-a");
-    mockSelectedSkill.current = SKILL_A;
-    render(<SkillsView />);
-    expect(screen.queryByText("Select a skill")).not.toBeInTheDocument();
-    // SkillPreview renders the skill name as its heading.
-    expect(screen.getByRole("heading", { name: "Skill A" })).toBeInTheDocument();
-  });
-
-  it("deleting the previewed skill clears ?selected= via router.replace", () => {
-    // SkillPreview's own tests cover the confirm/cancel/pending behavior in
-    // isolation — this covers the SkillsView-level wiring: what happens to
-    // the URL selection once SkillPreview's onDeleted actually fires.
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
-    mockDeleteSkillMutate.mockImplementation((_id, opts) => opts?.onSuccess?.());
-    mockSkills.current = [SKILL_A, SKILL_B];
-    mockSearchParams.current = new URLSearchParams("selected=sk-a");
-    mockSelectedSkill.current = SKILL_A;
-
-    render(<SkillsView />);
-    fireEvent.click(screen.getByRole("button", { name: "Delete skill" }));
-
-    expect(mockDeleteSkillMutate).toHaveBeenCalledWith("sk-a", expect.any(Object));
-    expect(mockRouterReplace).toHaveBeenCalledWith("/skills?");
-
-    confirmSpy.mockRestore();
+    expect(mockRouterPush).toHaveBeenCalledWith("/skills/sk-b");
   });
 
   it("opens the AddSkillDrawer (file tab) from the Add Skill dropdown", () => {
@@ -149,63 +103,9 @@ describe("SkillsView", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add Skill" }));
     fireEvent.click(screen.getByText("Create from scratch"));
     // "Create skill" matches both the modal title and its submit button, so
-    // assert on the modal's distinguishing subtitle instead.
+    // disambiguate via the modal's distinguishing subtitle instead.
     expect(
       screen.getByText("An agent skill is a focused review rule — a rubric, convention, or security check."),
     ).toBeInTheDocument();
-  });
-});
-
-describe("SkillsView — confirm before discarding an unsaved edit", () => {
-  it("confirms before switching away from a skill with an unsaved edit, and does not switch if the user cancels", () => {
-    mockSkills.current = [SKILL_A, SKILL_B];
-    mockSearchParams.current = new URLSearchParams("selected=sk-a");
-    mockSelectedSkill.current = SKILL_A;
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
-
-    const { container } = render(<SkillsView />);
-    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
-    fireEvent.change(container.querySelector("textarea.mono")!, { target: { value: "edited body" } });
-
-    mockRouterReplace.mockReset();
-    fireEvent.click(screen.getByText("Skill B"));
-
-    expect(confirmSpy).toHaveBeenCalled();
-    expect(mockRouterReplace).not.toHaveBeenCalled();
-
-    confirmSpy.mockRestore();
-  });
-
-  it("switches away when the user confirms discarding the unsaved edit", () => {
-    mockSkills.current = [SKILL_A, SKILL_B];
-    mockSearchParams.current = new URLSearchParams("selected=sk-a");
-    mockSelectedSkill.current = SKILL_A;
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
-
-    const { container } = render(<SkillsView />);
-    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
-    fireEvent.change(container.querySelector("textarea.mono")!, { target: { value: "edited body" } });
-
-    mockRouterReplace.mockReset();
-    fireEvent.click(screen.getByText("Skill B"));
-
-    expect(mockRouterReplace).toHaveBeenCalledWith("/skills?selected=sk-b");
-
-    confirmSpy.mockRestore();
-  });
-
-  it("does not prompt when switching away from a skill with no unsaved edit", () => {
-    mockSkills.current = [SKILL_A, SKILL_B];
-    mockSearchParams.current = new URLSearchParams("selected=sk-a");
-    mockSelectedSkill.current = SKILL_A;
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
-
-    render(<SkillsView />);
-    fireEvent.click(screen.getByText("Skill B"));
-
-    expect(confirmSpy).not.toHaveBeenCalled();
-    expect(mockRouterReplace).toHaveBeenCalledWith("/skills?selected=sk-b");
-
-    confirmSpy.mockRestore();
   });
 });

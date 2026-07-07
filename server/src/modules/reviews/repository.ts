@@ -21,6 +21,7 @@ export type ReviewRow = typeof t.reviews.$inferSelect;
 import * as reviewRepo from './repository/review.repo.js';
 import * as runRepo from './repository/run.repo.js';
 import * as pullRepo from './repository/pull.repo.js';
+import * as skillsRepo from './repository/skills.repo.js';
 
 export class ReviewRepository {
   constructor(private db: Db) {}
@@ -180,5 +181,19 @@ export class ReviewRepository {
 
   getRunTrace(runId: string): Promise<RunTrace | undefined> {
     return runRepo.getRunTrace(this.db, runId);
+  }
+
+  // ---- agent skills (enabled only) → review prompt ------------------------
+
+  /** Enabled skills linked to an agent, in `order` ascending. */
+  getEnabledAgentSkills(
+    agentId: string,
+  ): Promise<{ id: string; version: number; body: string }[]> {
+    return skillsRepo.getEnabledAgentSkills(this.db, agentId);
+  }
+
+  /** Record which skills (+ version consumed) fed a given review run. */
+  recordRunSkills(runId: string, skills: { id: string; version: number }[]): Promise<void> {
+    return skillsRepo.recordRunSkills(this.db, runId, skills);
   }
 }

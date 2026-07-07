@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { taskLine } from '../src/modules/reviews/helpers.js';
+import { taskLine, stripUntrustedMarkers } from '../src/modules/reviews/helpers.js';
+import { UNTRUSTED_SKILL_START, UNTRUSTED_SKILL_END } from '../src/modules/skills/constants.js';
 
 /**
  * Unit coverage for the review task-line. The key invariant: our trusted
@@ -20,5 +21,32 @@ describe('taskLine', () => {
     const line = taskLine(pull);
     expect(line).toMatch(/never .*withhold .*(or downgrade )?.*security/i);
     expect(line).toMatch(/review the entire diff/i);
+  });
+});
+
+/**
+ * `stripUntrustedMarkers` is the sanitization step between a human-vetted
+ * (enabled) skill body and the review prompt's un-delimiter-wrapped `skills`
+ * slot — see server/INSIGHTS.md, 2026-07-01.
+ */
+describe('stripUntrustedMarkers', () => {
+  it('strips both markers when present', () => {
+    const body = `${UNTRUSTED_SKILL_START}\nAlways use snake_case.\n${UNTRUSTED_SKILL_END}`;
+    expect(stripUntrustedMarkers(body)).toBe('Always use snake_case.');
+  });
+
+  it('is a no-op (besides trimming) when no markers are present', () => {
+    expect(stripUntrustedMarkers('Always use snake_case.')).toBe('Always use snake_case.');
+    expect(stripUntrustedMarkers('  Always use snake_case.  ')).toBe('Always use snake_case.');
+  });
+
+  it('strips a lone start marker with no matching end marker', () => {
+    const body = `${UNTRUSTED_SKILL_START}\nAlways use snake_case.`;
+    expect(stripUntrustedMarkers(body)).toBe('Always use snake_case.');
+  });
+
+  it('trims surrounding whitespace left after stripping', () => {
+    const body = `  ${UNTRUSTED_SKILL_START}  \n  Always use snake_case.  \n  ${UNTRUSTED_SKILL_END}  `;
+    expect(stripUntrustedMarkers(body)).toBe('Always use snake_case.');
   });
 });

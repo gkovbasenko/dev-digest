@@ -6,7 +6,7 @@ import * as schema from '../../db/schema.js';
 import type { AgentRow } from '../../db/rows.js';
 import type { ReviewRepository, FindingRow, PullRow, ReviewRow } from './repository.js';
 import { REVIEW_STRATEGY } from './constants.js';
-import { taskLine } from './helpers.js';
+import { taskLine, stripUntrustedMarkers } from './helpers.js';
 import { loadDiff } from './diff-loader.js';
 import { computeIntent, renderIntent } from './intent/compute.js';
 
@@ -214,6 +214,14 @@ export class ReviewRunExecutor {
 
       const task = taskLine(pull) + rankNote;
 
+      // Skills linked to this agent — only `enabled: true` ones (the SQL
+      // filter in getEnabledAgentSkills is the vetting boundary), with the
+      // skills module's "needs vetting" markers stripped before the body
+      // reaches assemblePrompt's un-delimiter-wrapped `skills` slot (see
+      // server/INSIGHTS.md, 2026-07-01).
+      const loadedSkills = await this.repo.getEnabledAgentSkills(agent.id);
+      const skillBodies = loadedSkills.map((s) => stripUntrustedMarkers(s.body));
+
       // ---- Engine: assemble → single-pass → grounding -----------------------
       // The pure review pipeline lives in @devdigest/reviewer-core (shared with
       // the CI runner). The service owns only I/O: repo-intel context resolution
@@ -231,6 +239,8 @@ export class ReviewRunExecutor {
         ...(callersDigest ? { callers: callersDigest } : {}),
         // T3 — repo skeleton, same omit-when-empty contract.
         ...(repoMap ? { repoMap } : {}),
+        // Enabled skills linked to this agent; omitted when the agent has none.
+        ...(skillBodies.length ? { skills: skillBodies } : {}),
         // PR author's description/body — untrusted; assemblePrompt wraps +
         // truncates it. Omitted when the PR has no body.
         ...(pull.body ? { prDescription: pull.body } : {}),
@@ -262,6 +272,16 @@ export class ReviewRunExecutor {
       });
       const findingRows = await this.repo.insertFindings(review.id, keptFindings);
       runLog.result(`Persisted review ${review.id} with ${findingRows.length} finding(s)`);
+
+      // Usage/audit trail: which skills (+ version) fed this run. The
+      // agent_runs row for `runId` already exists (created before executeRuns
+      // runs), so the FK is satisfied here.
+      if (loadedSkills.length) {
+        await this.repo.recordRunSkills(
+          runId,
+          loadedSkills.map((s) => ({ id: s.id, version: s.version })),
+        );
+      }
 
       // Mark the commit this review ran against so the PR list can tell
       // reviewed / needs-review (head moved) / stale apart.

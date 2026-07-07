@@ -5,6 +5,12 @@ Newest first. See `.claude/skills/engineering-insights/SKILL.md` for what belong
 
 ---
 
+## 2026-07-07 — Skills ARE now wired into the review prompt; `run-executor` strips `UNTRUSTED_SKILL_*` markers and passes only `enabled` skills
+
+Supersedes the "no code reads skills into a review run" half of the 2026-07-01 `assemblePrompt` insight below. `run-executor.ts`'s `runOneAgent` now loads `ReviewRepository.getEnabledAgentSkills(agent.id)` (join `agent_skills`→`skills` WHERE `enabled=true`, ordered by `order`), runs each body through `stripUntrustedMarkers()` (`reviews/helpers.ts`), and passes them as `reviewPullRequest({ skills })` (omit-when-empty, like `callers`/`repoMap`). Consumed skills are recorded into the new `run_skills` join (`recordRunSkills`) for the stats query + audit trail. The chosen boundary is **strip-on-enable = trust**: `enabled` is the human vetting gate, so markers are stripped rather than re-wrapped. The still-true residual from the older note: `reviewer-core`'s `parts.skills` is STILL not `wrapUntrusted()`-wrapped, so never feed a non-enabled or marker-wrapped body straight into it.
+
+**Evidence:** `server/src/modules/reviews/run-executor.ts` (`runOneAgent`: `getEnabledAgentSkills` → `stripUntrustedMarkers` → `reviewPullRequest({ skills })`, then `recordRunSkills` after `insertReview`), `server/src/modules/reviews/helpers.ts` (`stripUntrustedMarkers`), `server/src/modules/reviews/repository/skills.repo.ts`, `server/test/reviews-skills.it.test.ts`; this session (2026-07-07).
+
 ## 2026-07-06 — The `pulls` module has NO service/repository layer — routes hit `container.db` directly (skill table is aspirational)
 
 The `server-architecture` skill's module table lists `pulls` with "repository ✓", but the module folder is only `helpers.ts`, `routes.ts`, `status.ts` — no `service.ts`, no `repository.ts`. `pulls/routes.ts` queries `container.db` **directly** (~22 call sites), and the existing `GET /repos/:id/pulls` is a "fat" route doing DB + GitHub sync inline. So when ADDING a read route to `pulls` (e.g. a persisted-only `pr number → prId` lookup), mirror this pattern — direct `container.db` read in the route, no GitHub adapter call — rather than inventing a lone repository/service layer, which would break the module's consistency. The onion route→db dependency rule is still honored either way.

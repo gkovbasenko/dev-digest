@@ -275,12 +275,18 @@ export class ReviewRunExecutor {
 
       // Usage/audit trail: which skills (+ version) fed this run. The
       // agent_runs row for `runId` already exists (created before executeRuns
-      // runs), so the FK is satisfied here.
+      // runs), so the FK is satisfied here. Best-effort: this is secondary
+      // bookkeeping and the review above is already persisted, so a failure
+      // here must not fail an otherwise-successful run — log and continue.
       if (loadedSkills.length) {
-        await this.repo.recordRunSkills(
-          runId,
-          loadedSkills.map((s) => ({ id: s.id, version: s.version })),
-        );
+        try {
+          await this.repo.recordRunSkills(
+            runId,
+            loadedSkills.map((s) => ({ id: s.id, version: s.version })),
+          );
+        } catch (err) {
+          runLog.error(`Failed to record run_skills usage for run ${runId}: ${String(err)}`);
+        }
       }
 
       // Mark the commit this review ran against so the PR list can tell

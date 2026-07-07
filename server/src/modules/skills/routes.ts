@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { SkillType, CommunitySkill, SkillVersion, SkillStats } from '@devdigest/shared';
+import { Skill, SkillType, CommunitySkill, SkillVersion, SkillStats } from '@devdigest/shared';
 import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
 import { NotFoundError } from '../../platform/errors.js';
@@ -139,7 +139,7 @@ export default async function skillsRoutes(appBase: FastifyInstance) {
 
   app.post(
     '/skills/:id/restore',
-    { schema: { params: IdParams, body: RestoreSkillBody } },
+    { schema: { params: IdParams, body: RestoreSkillBody, response: { 200: Skill } } },
     async (req) => {
       const { workspaceId } = await getContext(app.container, req);
       const skill = await service.restore(workspaceId, req.params.id, req.body.version);

@@ -87,7 +87,19 @@ export function reviewToDto(
  * stripped (trusted now), never re-wrapped.
  */
 export function stripUntrustedMarkers(body: string): string {
-  return body.split(UNTRUSTED_SKILL_START).join('').split(UNTRUSTED_SKILL_END).join('').trim();
+  // Reverse of the import wrapper `wrapUntrusted` (`${START}\n<body>\n${END}`):
+  // remove the vetting markers ONLY where they wrap the body at its boundaries.
+  // Anchored (not a global replace) so a marker string that legitimately
+  // appears *inside* a body is preserved rather than silently deleted — the
+  // old split/join stripped every occurrence and could mangle real content.
+  let s = body.trim();
+  if (s.startsWith(UNTRUSTED_SKILL_START)) {
+    s = s.slice(UNTRUSTED_SKILL_START.length);
+  }
+  if (s.endsWith(UNTRUSTED_SKILL_END)) {
+    s = s.slice(0, s.length - UNTRUSTED_SKILL_END.length);
+  }
+  return s.trim();
 }
 
 /**

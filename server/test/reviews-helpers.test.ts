@@ -49,4 +49,16 @@ describe('stripUntrustedMarkers', () => {
     const body = `  ${UNTRUSTED_SKILL_START}  \n  Always use snake_case.  \n  ${UNTRUSTED_SKILL_END}  `;
     expect(stripUntrustedMarkers(body)).toBe('Always use snake_case.');
   });
+
+  it('preserves a marker string that appears inside the body — only the wrapper is stripped', () => {
+    const body = `${UNTRUSTED_SKILL_START}\nRule: never write ${UNTRUSTED_SKILL_START} verbatim in code.\n${UNTRUSTED_SKILL_END}`;
+    expect(stripUntrustedMarkers(body)).toBe(
+      `Rule: never write ${UNTRUSTED_SKILL_START} verbatim in code.`,
+    );
+  });
+
+  it('does not strip a trailing end marker that is not at the very end', () => {
+    const body = `${UNTRUSTED_SKILL_END} still trusted content here`;
+    expect(stripUntrustedMarkers(body)).toBe(`${UNTRUSTED_SKILL_END} still trusted content here`);
+  });
 });

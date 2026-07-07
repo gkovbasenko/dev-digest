@@ -6,7 +6,7 @@ Project-level Claude Code subagents, committed to the repo as shared team specia
 
 | Agent | Model | Tools | Purpose |
 |-------|-------|-------|---------|
-| [planner](planner.md) | opus | Read, Grep, Glob, Bash, Skill | Read-only. Produces a structured **Development Plan** — decomposes work into parallelizable, skill-tagged tasks. Never writes code. |
+| [implementation-planner](implementation-planner.md) | opus | Read, Grep, Glob, Bash, Skill, AskUserQuestion | Read-only. Turns given requirements into an **Implementation Plan** — verifies/clarifies the requirements, asks multi- vs single-agent mode, decomposes into skill-tagged tasks. Does not author the spec; never writes code. |
 | [implementer](implementer.md) | sonnet | Read, Edit, Write, Bash, Grep, Glob, Skill | Executes **one** scoped plan task (backend or UI), loads the right skill set for its module, self-verifies via typecheck + existing tests, reviews only its own diff. |
 | [researcher](researcher.md) | sonnet | Read, Grep, Glob, Bash | Read-only. Finds/verifies information in the codebase; no web access; never edits. |
 | [web-researcher](web-researcher.md) | sonnet | WebSearch, WebFetch | Read-only. Finds/verifies information on the internet, with links; no filesystem access. |
@@ -15,13 +15,13 @@ Project-level Claude Code subagents, committed to the repo as shared team specia
 | [plan-verifier](plan-verifier.md) | opus | Read, Grep, Glob, Bash, Skill | Read-only. Verifies a Development Plan's requirements are implemented AND verified; per-requirement PASS/PARTIAL/FAIL. |
 | [doc-writer](doc-writer.md) | sonnet | Read, Edit, Write, Bash, Grep, Glob, Skill | Writes documentation grounded in real code — Diátaxis-typed, placed by destination table, Mermaid for diagrams. |
 
-Typical flow: **researcher** / **web-researcher** gather context (codebase and internet respectively) → **planner** writes the Development Plan → several **implementer** and **test-writer** agents run in parallel over the plan's disjoint tasks → **architecture-reviewer** and **plan-verifier** check the result (quality and requirement-coverage respectively) → **doc-writer** documents it.
+Typical flow: **researcher** / **web-researcher** gather context (codebase and internet respectively) → **implementation-planner** turns the requirements into an Implementation Plan → several **implementer** and **test-writer** agents run in parallel over the plan's disjoint tasks (or one implementer runs them sequentially, if single-agent mode was chosen) → **architecture-reviewer** and **plan-verifier** check the result (quality and requirement-coverage respectively) → **doc-writer** documents it.
 
 ---
 
-## planner
+## implementation-planner
 
-Read-only agent that turns a request into a structured **Development Plan**: a self-contained spec that parallel `implementer` agents can execute without further clarification. It knows all five modules, encodes the project's standing constraints (shared-contract mirror, DI container, generated migrations, reviewer-core purity, e2e JSON-only), reads the relevant `INSIGHTS.md` files, and tags every task with the exact skills the implementer must load.
+Read-only agent that turns **already-defined requirements** into a structured **Implementation Plan** that `implementer` agents can execute. It does not author the specification — requirements are its input. It first verifies those requirements against the codebase, clarifies ambiguities via `AskUserQuestion`, recommends better ways to implement, and asks whether to run in multi-agent (parallel) or single-agent (one pass) mode. It knows all five modules, encodes the project's standing constraints (shared-contract mirror, DI container, generated migrations, reviewer-core purity, e2e JSON-only), reads the relevant `INSIGHTS.md` files, and tags every task with the exact skills the implementer must load.
 
 **Based on:**
 
@@ -46,7 +46,7 @@ Executes a single scoped task from the Development Plan and nothing more. Mandat
   Source: [skills docs](https://code.claude.com/docs/en/skills) (official, high)
 - **Agent verifies its own work** — give it a check it can run (typecheck + tests) and iterate until green; self-review only its own diff, no separate reviewer pass.
   Sources: [best practices](https://code.claude.com/docs/en/best-practices) (official, high). *Conflicting view worth noting:* some argue an agent should never grade its own code and require a separate validator — [dev.to: validating AI-written code](https://dev.to/teppana88/how-i-validate-quality-when-ai-agents-write-my-code-481c) (practitioner, medium). We adopted the lighter self-verify loop per Anthropic's docs.
-- **Parallel work without conflicts via disjoint file sets** — the planner guarantees non-overlapping files; `isolation: worktree` ([worktrees docs](https://code.claude.com/docs/en/worktrees), official, high) was evaluated and **deliberately not used**, so all implementers share one tree and rely on that partitioning.
+- **Parallel work without conflicts via disjoint file sets** — in multi-agent mode the implementation-planner guarantees non-overlapping files; `isolation: worktree` ([worktrees docs](https://code.claude.com/docs/en/worktrees), official, high) was evaluated and **deliberately not used**, so all implementers share one tree and rely on that partitioning.
 - **Model selection by complexity** — sonnet for coding.
   Source: [sub-agents docs](https://code.claude.com/docs/en/sub-agents) (official, high)
 
@@ -120,7 +120,7 @@ Writes and maintains documentation: describing built features, turning implement
 
 ---
 
-## Skill routing (shared by planner + implementer)
+## Skill routing (shared by implementation-planner + implementer)
 
 | Task target | Skills |
 |---|---|
@@ -129,4 +129,4 @@ Writes and maintains documentation: describing built features, turning implement
 | **reviewer-core/** | typescript-expert, zod, architecture-patterns, engineering-insights |
 | **e2e/** | typescript-expert |
 
-Engineering insights reach the agents by **both** paths: the planner surfaces cross-cutting insights into the plan, and each implementer reads its own module's `INSIGHTS.md` on-site before coding.
+Engineering insights reach the agents by **both** paths: the implementation-planner surfaces cross-cutting insights into the plan, and each implementer reads its own module's `INSIGHTS.md` on-site before coding.

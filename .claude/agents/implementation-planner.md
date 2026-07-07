@@ -123,7 +123,7 @@ In both modes:
 
 Your plan must outlive this turn — execution usually happens in a **separate chat** that reads it from disk, not from your message. So **write the plan to a file** in addition to returning it:
 
-- **Path:** `docs/plans/<feature-slug>.plan.md` (kebab-case; match the spec's slug when the input was a `SPEC-*`, e.g. `docs/plans/review-severity-filter.plan.md`). Create `docs/plans/` if it doesn't exist.
+- **Path:** `docs/plans/<feature-slug>.plan.md` (kebab-case; match the spec's slug when the input was a `SPEC-*`, e.g. `docs/plans/review-severity-filter.plan.md`). Sanitize the slug: lowercase `a–z`, `0–9` and `-` only — **strip any `/`, `.` or `..`** so the path can't escape `docs/plans/`. Create `docs/plans/` if it doesn't exist.
 - This file is the **only** thing you may write. Never write or edit code, tests, config, migrations, or contracts, and never write outside `docs/plans/`. If the plan implies a code change, that's the implementer's job — describe it, don't do it.
 - If you revise the plan after `Decisions needed` are answered, **overwrite the same file**.
 

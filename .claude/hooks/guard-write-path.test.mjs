@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { isProtectedPath } from "./guard-write-path.mjs";
 
-const ctx = { root: "/repo", home: "/home/dev" };
+const ctx = { root: "/repo", home: "/home/dev", tmpDirs: ["/private/tmp/", "/tmp/"] };
 const allow = (p) => assert.equal(isProtectedPath(p, ctx), false, `expected ALLOW: ${p}`);
 const block = (p) => assert.equal(isProtectedPath(p, ctx), true, `expected BLOCK: ${p}`);
 
@@ -49,4 +49,16 @@ test("does not misfire on lookalike names", () => {
   allow("server/.environment.ts"); // .env-something, not a dotenv file
   allow("client/git/foo.ts"); // 'git' dir, not '.git'
   allow("docs/settings.json"); // not under .claude/
+});
+
+test("repo-jail: blocks slug/path traversal escaping the repo root", () => {
+  block("specs/../../../etc/cron.d/evil"); // resolves to /etc/cron.d/evil
+  block("docs/plans/../../../var/data/evil.txt"); // resolves to /var/data/evil.txt
+  block("../sibling-project/src/x.ts"); // resolves to /sibling-project/src/x.ts
+});
+
+test("repo-jail: allows known-safe external areas (Claude memory + temp)", () => {
+  allow("/home/dev/.claude/projects/proj/memory/note.md"); // memory dir
+  allow("/private/tmp/claude-501/scratch/tmp.ts"); // scratchpad
+  allow("/tmp/whatever.txt");
 });

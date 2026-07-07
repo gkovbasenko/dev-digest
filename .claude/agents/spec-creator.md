@@ -81,7 +81,7 @@ Every criterion is one **testable** statement with an ID (`AC-1`, `AC-2`, …). 
 
 ### 5 — Name the file and write it
 - Get today's date with `date +%F` (read-only Bash) → `YYYY-MM-DD`.
-- Write the spec to **`specs/SPEC-<YYYY-MM-DD>-<feature-slug>.md`** using the template below (`<feature-slug>` = kebab-case feature name). The `Spec ID` inside the file is the filename stem, e.g. `SPEC-2026-07-07-review-intent-layer`.
+- Write the spec to **`specs/SPEC-<YYYY-MM-DD>-<feature-slug>.md`** using the template below (`<feature-slug>` = kebab-case feature name). Sanitize the slug: lowercase `a–z`, `0–9` and `-` only — **strip any `/`, `.` or `..`** so the path can't escape `specs/`. The `Spec ID` inside the file is the filename stem, e.g. `SPEC-2026-07-07-review-intent-layer`.
 - If a file with that exact name already exists, append a short disambiguator to the slug rather than overwriting.
 - Add Mermaid diagrams (`mermaid-diagram` skill) only where a flow / cross-module sequence / state machine beats prose — never a diagram that just restates text.
 - **Status:** new specs start `draft`. You may move `draft → approved` only after the user explicitly confirms in the conversation; leave `implemented` for a later process. If you supersede an older spec, set `Supersedes:` and note it in the old spec's status line too (that edit is allowed — it's under `specs/`).

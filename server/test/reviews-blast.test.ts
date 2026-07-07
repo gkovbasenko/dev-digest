@@ -150,6 +150,25 @@ describe('toPrBlastResponse', () => {
     expect(result.degraded).toBe(false);
     expect(result.reason).toBeNull();
   });
+
+  it('stays degraded on a partial index even when the facade flag is an explicit false', () => {
+    // Regression: `blast.degraded ?? …` would let an explicit `false` mask a
+    // partial index (`??` only falls back on null/undefined). A partial/failed
+    // index must always surface as degraded so the UI shows the badge.
+    const blast: BlastResult = {
+      changedSymbols: [],
+      callers: [],
+      impactedEndpoints: [],
+      degraded: false,
+    };
+    const result = toPrBlastResponse(
+      blast,
+      indexState({ status: 'partial', degradedReason: 'index_partial' }),
+    );
+    expect(result.index_status).toBe('partial');
+    expect(result.degraded).toBe(true);
+    expect(result.reason).toBe('This repo is only partially indexed.');
+  });
 });
 
 // ---- ReviewService.getBlast -------------------------------------------------
@@ -244,6 +263,29 @@ describe('ReviewService.getBlast', () => {
     expect(result.summary).toBe('');
     expect(result.index_status).toBe('full');
     expect(result.degraded).toBe(false);
+  });
+
+  it('handles a PR with no persisted files: calls the facade with an empty changedFiles list', async () => {
+    const blastCalls: { repoId: string; changedFiles: string[] }[] = [];
+    const container = fakeContainer({
+      pull: fakePull(),
+      files: [], // no persisted pr_files (e.g. detail never loaded)
+      getBlastRadius: async (repoId, changedFiles) => {
+        blastCalls.push({ repoId, changedFiles });
+        return { changedSymbols: [], callers: [], impactedEndpoints: [], degraded: true, reason: 'no_data' };
+      },
+      getIndexState: async () => indexState({ status: 'degraded', degradedReason: 'no_data' }),
+    });
+
+    const service = new ReviewService(container);
+    const result = await service.getBlast('ws-1', 'pr-1');
+
+    expect(blastCalls).toEqual([{ repoId: 'repo-1', changedFiles: [] }]);
+    expect(result.changed_symbols).toEqual([]);
+    expect(result.downstream).toEqual([]);
+    expect(result.impacted_endpoints).toEqual([]);
+    expect(result.degraded).toBe(true);
+    expect(result.reason).toBe('No index data is available for this repo yet.');
   });
 
   it('throws NotFoundError when the pull is missing', async () => {

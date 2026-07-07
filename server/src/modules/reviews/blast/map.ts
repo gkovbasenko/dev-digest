@@ -89,7 +89,11 @@ export function toPrBlastResponse(blast: BlastResult, state: IndexState): PrBlas
     impacted_endpoints: [...allEndpoints],
     impacted_crons: [...allCrons],
     index_status: state.status,
-    degraded: blast.degraded ?? state.status !== 'full',
+    // Degraded if the facade says so OR the index itself isn't full — a
+    // partial/failed index means the map may be incomplete even when the
+    // facade's own flag is an explicit `false` (`??` alone would let that
+    // `false` mask a partial index, since `??` only falls back on null/undef).
+    degraded: (blast.degraded ?? false) || state.status !== 'full',
     reason: reasonMessage(blast.reason ?? state.degradedReason),
   });
 }

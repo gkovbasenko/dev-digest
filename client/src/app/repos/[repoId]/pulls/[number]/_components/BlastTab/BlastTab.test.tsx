@@ -38,6 +38,17 @@ const BLAST_DEGRADED = {
   reason: "The repo has not been indexed yet.",
 };
 
+const BLAST_FAILED = {
+  changed_symbols: [],
+  downstream: [],
+  impacted_endpoints: [],
+  impacted_crons: [],
+  summary: "",
+  index_status: "failed" as const,
+  degraded: true,
+  reason: null,
+};
+
 const PRIOR_PRS_SOME = {
   history: [
     {
@@ -149,6 +160,32 @@ describe("BlastTab", () => {
     expect(screen.getByText(commonMessages.states.error)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: commonMessages.actions.retry }));
     expect(refetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders the loading state (no crash) when prId is null — the query is disabled", () => {
+    // useBlast(null) is disabled, so `data` is undefined; the tab must show the
+    // loader, not blow up. (Mock returns undefined data / no error.)
+    blastData = undefined;
+    blastError = false;
+    renderWithIntl(<BlastTab prId={null} repoId="repo1" repoFullName="acme/widgets" headSha="abc123" />);
+    expect(screen.getByText(commonMessages.states.loading)).toBeInTheDocument();
+  });
+
+  it("falls back to the failed-index message in the degraded badge when index_status is 'failed' and reason is null", () => {
+    blastData = BLAST_FAILED;
+    renderWithIntl(<BlastTab prId="pr1" repoId="repo1" repoFullName="acme/widgets" headSha="abc123" />);
+    expect(screen.getByText(prReviewMessages.blast.indexStatus.failed)).toBeInTheDocument();
+    // Still an honest empty state, never a blank screen.
+    expect(screen.getByText("No changed symbols detected")).toBeInTheDocument();
+  });
+
+  it("renders caller rows as plain text (not links) when repoFullName/headSha are null", () => {
+    renderWithIntl(<BlastTab prId="pr1" repoId="repo1" repoFullName={null} headSha={null} />);
+    // The file:line still shows so the map isn't lost, just without a deep link.
+    expect(screen.getByText("src/billing/checkout.ts:42")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "src/billing/checkout.ts:42" }),
+    ).not.toBeInTheDocument();
   });
 
   describe("Prior PRs touching these files accordion", () => {

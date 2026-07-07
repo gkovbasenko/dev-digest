@@ -141,4 +141,17 @@ describe('get_blast_radius', () => {
     expect(result.isError).toBe(true);
     expect(result.content[0]!.text).toContain('PR #999 not found');
   });
+
+  it('error-forwards when the blast endpoint itself fails (resolution succeeds, GET /blast 500s)', async () => {
+    mockFetch([
+      get('/repos', REPOS_FIXTURE),
+      get('/repos/repo-1/pulls', PULLS_FIXTURE),
+      get('/pulls/pr-42/blast', { error: { code: 'internal_error' } }, 500),
+    ]);
+
+    const result = await getBlastRadiusTool.handler({ repo: 'acme/widgets', pr: 42 });
+    expect(result.isError).toBe(true);
+    // Surfaces the upstream HTTP failure as a structured tool error, not a throw.
+    expect(result.content[0]!.text).toContain('server error (500)');
+  });
 });

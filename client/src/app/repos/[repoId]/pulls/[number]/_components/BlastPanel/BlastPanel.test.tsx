@@ -304,6 +304,18 @@ describe("BlastPanel", () => {
     expect(screen.queryByText("processPayment")).not.toBeInTheDocument();
   });
 
+  it("restores the symbol tree when toggling Graph then back to Tree", () => {
+    renderWithIntl(<BlastPanel prId="pr1" repoId="repo1" repoFullName="acme/widgets" headSha="abc123" />);
+
+    fireEvent.click(screen.getByRole("button", { name: prReviewMessages.blast.graphView }));
+    expect(screen.queryByText("processPayment")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: prReviewMessages.blast.treeView }));
+    // Tree is back and the symbol block renders expanded (callers visible).
+    expect(screen.getByText("processPayment")).toBeInTheDocument();
+    expect(screen.getByText("src/billing/refund.ts:10")).toBeInTheDocument();
+  });
+
   it("collapses a symbol block via keyboard (Enter on the header)", () => {
     renderWithIntl(<BlastPanel prId="pr1" repoId="repo1" repoFullName="acme/widgets" headSha="abc123" />);
     expect(screen.getByText("src/billing/refund.ts:10")).toBeInTheDocument();

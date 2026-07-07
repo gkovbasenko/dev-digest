@@ -17,6 +17,8 @@ import { ReviewService } from './service.js';
  *   GET    /pulls/:id/intent                           → stored derived intent/scope, or null
  *   POST   /pulls/:id/intent/recompute                 → (re)compute + persist intent; returns it
  *   GET    /pulls/:id/smart-diff                       → deterministic Smart Diff (no LLM, no persistence)
+ *   GET    /pulls/:id/blast                            → blast radius over the repo-intel index (no LLM, no persistence)
+ *   GET    /pulls/:id/prior-prs                        → other merged PRs touching the same files (no LLM, no persistence)
  */
 const FINDING_ACTIONS = ['accept', 'dismiss'] as const;
 export default async function reviewsRoutes(appBase: FastifyInstance) {
@@ -171,5 +173,17 @@ export default async function reviewsRoutes(appBase: FastifyInstance) {
   app.get('/pulls/:id/smart-diff', { schema: { params: IdParams } }, async (req) => {
     const { workspaceId } = await getContext(container, req);
     return service.getSmartDiff(workspaceId, req.params.id);
+  });
+
+  // ---- Blast radius (deterministic read over repo-intel; no LLM) ----------
+  app.get('/pulls/:id/blast', { schema: { params: IdParams } }, async (req) => {
+    const { workspaceId } = await getContext(container, req);
+    return service.getBlast(workspaceId, req.params.id);
+  });
+
+  // ---- Prior PRs touching these files (deterministic read; no LLM) --------
+  app.get('/pulls/:id/prior-prs', { schema: { params: IdParams } }, async (req) => {
+    const { workspaceId } = await getContext(container, req);
+    return service.getPriorPrs(workspaceId, req.params.id);
   });
 }

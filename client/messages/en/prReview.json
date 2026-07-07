@@ -128,5 +128,30 @@
     "emptyTitle": "No intent computed yet",
     "compute": "Compute intent",
     "recompute": "Recompute"
+  },
+  "blast": {
+    "title": "Blast radius",
+    "treeView": "Tree",
+    "graphView": "Graph",
+    "graphPlaceholder": "Graph view is coming soon — use Tree for now.",
+    "symbols": "Symbols",
+    "callers": "Callers",
+    "endpoints": "Endpoints",
+    "crons": "Cron jobs",
+    "callersCount": "{count} callers",
+    "degradedDefault": "The repo index is incomplete — results may be partial.",
+    "indexStatus": {
+      "partial": "The repo index is partially built — some impacts may be missing.",
+      "degraded": "The repo index is degraded — results may be incomplete.",
+      "failed": "The repo index build failed — blast radius is unavailable."
+    },
+    "emptyTitle": "No changed symbols detected",
+    "emptyBody": "This PR's changes didn't map to any indexed symbols.",
+    "priorPrs": {
+      "title": "Prior PRs touching these files",
+      "count": "{count} PRs",
+      "filesOverlap": "{count} files",
+      "empty": "No prior merged PRs touched these files."
+    }
   }
 }

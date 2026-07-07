@@ -44,6 +44,15 @@ export const BlastRadius = z.object({
 });
 export type BlastRadius = z.infer<typeof BlastRadius>;
 
+export const PrBlastResponse = BlastRadius.extend({
+  impacted_endpoints: z.array(z.string()),
+  impacted_crons: z.array(z.string()),
+  index_status: z.enum(['full', 'partial', 'degraded', 'failed']),
+  degraded: z.boolean(),
+  reason: z.string().nullish(),
+});
+export type PrBlastResponse = z.infer<typeof PrBlastResponse>;
+
 // ---- Risks ----
 export const RiskSeverity = z.enum(['high', 'medium', 'low']);
 export type RiskSeverity = z.infer<typeof RiskSeverity>;

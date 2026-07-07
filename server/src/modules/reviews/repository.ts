@@ -14,6 +14,7 @@ import type { Finding, Intent, RunSummary, RunTrace } from '@devdigest/shared';
  */
 
 import type { FindingRow, PullRow } from '../../db/rows.js';
+import type { PriorPrFileRow } from './prior-prs/map.js';
 export type { FindingRow, PullRow };
 
 export type ReviewRow = typeof t.reviews.$inferSelect;
@@ -133,6 +134,18 @@ export class ReviewRepository {
 
   getIntent(prId: string): Promise<Intent | undefined> {
     return pullRepo.getIntent(this.db, prId);
+  }
+
+  // ---- prior PRs (blast: "prior PRs touching these files") ---------------
+
+  /** Flat join rows (one per prior merged PR x overlapping file), no N+1. */
+  getPriorPrRows(
+    repoId: string,
+    excludePrId: string,
+    changedFiles: string[],
+    limit: number,
+  ): Promise<PriorPrFileRow[]> {
+    return pullRepo.getPriorPrRows(this.db, repoId, excludePrId, changedFiles, limit);
   }
 
   // ---- observability: agent_runs + run_traces ----------------------------

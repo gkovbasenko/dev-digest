@@ -1,10 +1,12 @@
 import type { Container } from '../../platform/container.js';
-import type {
-  FindingActionKind,
-  PrIntentRecord,
-  RunEventKind,
-  RunTrace,
-  SmartDiffResponse,
+import {
+  PrHistory,
+  type FindingActionKind,
+  type PrBlastResponse,
+  type PrIntentRecord,
+  type RunEventKind,
+  type RunTrace,
+  type SmartDiffResponse,
 } from '@devdigest/shared';
 import { AppError, NotFoundError } from '../../platform/errors.js';
 import type { AgentRow } from '../../db/rows.js';
@@ -15,6 +17,12 @@ import { actOnFinding as actOnFindingImpl } from './findings.js';
 import { findingRowToDto, reviewToDto } from './helpers.js';
 import { computeIntent, type IntentLogger } from './intent/compute.js';
 import { composeSmartDiff } from './smart-diff/compose.js';
+import { toPrBlastResponse } from './blast/map.js';
+import { groupPriorPrRows } from './prior-prs/map.js';
+
+/** Cap on "prior PRs touching these files" results — an unbounded overlap
+ *  query on a busy repo would be a footgun (server INSIGHTS/plan gotcha). */
+const PRIOR_PRS_LIMIT = 10;
 
 // Re-export DTO types + converters for backward-compatible imports from
 // './service.js' (these previously lived here; logic now in ./helpers.ts).
@@ -240,5 +248,55 @@ export class ReviewService {
     // (server/INSIGHTS.md 2026-06-30) — accepted for Smart Diff v1.
     const findings = (reviews[0]?.findings ?? []).map(findingRowToDto);
     return composeSmartDiff(files, findings);
+  }
+
+  // ===========================================================================
+  // Blast radius (deterministic read over the repo-intel index; no LLM)
+  // ===========================================================================
+
+  /**
+   * Compose a PR's blast radius: changed symbols, grouped downstream callers,
+   * impacted endpoints/crons, and index status/degraded flag. Purely a read
+   * over `container.repoIntel` (the facade) — no direct index/DB access, no
+   * LLM call. `summary` stays empty here (reserved for the deferred one-
+   * paragraph LLM explanation, T4).
+   */
+  async getBlast(workspaceId: string, prId: string): Promise<PrBlastResponse> {
+    const pull = await this.repo.getPull(workspaceId, prId);
+    if (!pull) throw new NotFoundError('Pull request not found');
+    const files = await this.repo.getPrFiles(prId);
+    const changedFiles = files.map((f) => f.path);
+
+    const blast = await this.container.repoIntel.getBlastRadius(pull.repoId, changedFiles);
+    const state = await this.container.repoIntel.getIndexState(pull.repoId);
+
+    return toPrBlastResponse(blast, state);
+  }
+
+  // ===========================================================================
+  // Prior PRs touching these files (deterministic read; no LLM)
+  // ===========================================================================
+
+  /**
+   * Other MERGED PRs in the same repo whose persisted `pr_files` overlap this
+   * PR's changed files, most-recent first, capped at `PRIOR_PRS_LIMIT`.
+   *
+   * `pull_requests.status` stores GitHub's merge state directly (set via
+   * `mapStatus` on import — `server/src/adapters/github/octokit.ts:19` — so
+   * `status = 'merged'` IS actually written), and there is no separate
+   * merge-timestamp column, so `merged_at` is derived from `updated_at`
+   * (see `groupPriorPrRows`).
+   */
+  async getPriorPrs(workspaceId: string, prId: string): Promise<PrHistory> {
+    const pull = await this.repo.getPull(workspaceId, prId);
+    if (!pull) throw new NotFoundError('Pull request not found');
+
+    const files = await this.repo.getPrFiles(prId);
+    const changedFiles = files.map((f) => f.path);
+    if (changedFiles.length === 0) return PrHistory.parse({ history: [] });
+
+    const rows = await this.repo.getPriorPrRows(pull.repoId, prId, changedFiles, PRIOR_PRS_LIMIT);
+    const history = groupPriorPrRows(rows, PRIOR_PRS_LIMIT);
+    return PrHistory.parse({ history });
   }
 }

@@ -27,7 +27,9 @@ Testing Library's default text normalizer (used by `getByDisplayValue` too, not 
 
 **How to apply:** when reviewing "does X markdown renderer allow XSS," check for `rehype-raw` (or equivalent raw-HTML-passthrough plugin) specifically — its absence is the actual safety boundary, not "react-markdown is generally safe." Separately, always verify link scheme handling in any custom link renderer; `react-markdown` itself does not strip dangerous schemes.
 
-**Evidence:** `client/src/vendor/ui/primitives/Markdown.tsx` (`safeHref`), `Markdown.test.tsx` (raw-HTML-not-rendered tests, href-sanitization tests); `client/package.json` has `react-markdown` but no `rehype-raw`.
+**Update 2026-07-07:** the boundary is now EXPLICIT — `Markdown.tsx` passes `rehypePlugins={[rehypeSanitize]}` (default GitHub allowlist), so HTML is sanitized at the AST level even if `rehype-raw` is ever added later. `safeHref` is kept as an independent second layer on link hrefs. So "safety = absence of rehype-raw" is no longer the whole story: it's now sanitize (raw HTML) + safeHref (link schemes). Rationale: a PR-review finding correctly noted that relying on a plugin's *absence* is an implicit guarantee, not an enforced one, for a renderer fed untrusted (imported/extracted) skill bodies.
+
+**Evidence:** `client/src/vendor/ui/primitives/Markdown.tsx` (`rehypeSanitize` + `safeHref`), `Markdown.test.tsx` (raw-HTML-not-rendered tests, href-sanitization tests, and a "legitimate content still renders after sanitization" regression test); `client/package.json` has `react-markdown`, `rehype-sanitize`, and no `rehype-raw`.
 
 ---
 

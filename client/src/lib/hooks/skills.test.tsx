@@ -104,4 +104,29 @@ describe("useRestoreSkillVersion", () => {
     expect(mockPost).toHaveBeenCalledWith("/skills/sk1/restore", { version: 1 });
     expect(result.current.data).toEqual(RESTORED_SKILL);
   });
+
+  it("invalidates the skills/skill/versions/stats queries and primes the skill cache on success", async () => {
+    mockPost.mockResolvedValue(RESTORED_SKILL);
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+    const setDataSpy = vi.spyOn(qc, "setQueryData");
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+    );
+
+    const { result } = renderHook(() => useRestoreSkillVersion(), { wrapper });
+
+    await act(async () => {
+      result.current.mutate({ id: "sk1", version: 1 });
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["skills"] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["skill", "sk1"] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["skill-versions", "sk1"] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["skill-stats", "sk1"] });
+    // The restored skill is written straight into its detail cache.
+    expect(setDataSpy).toHaveBeenCalledWith(["skill", "sk1"], RESTORED_SKILL);
+  });
 });

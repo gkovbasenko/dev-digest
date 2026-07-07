@@ -6,7 +6,7 @@ import { loadConfig } from '../src/platform/config.js';
 import { seed } from '../src/db/seed.js';
 import { MockLLMProvider, MockEmbedder, MockGitClient } from '../src/adapters/mocks.js';
 import * as t from '../src/db/schema.js';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import type { Review } from '@devdigest/shared';
 import { UNTRUSTED_SKILL_START, UNTRUSTED_SKILL_END } from '../src/modules/skills/constants.js';
 
@@ -186,6 +186,116 @@ d('A1 review skills wiring (Testcontainers pg)', () => {
     expect(bySkillId.get(enabled1!.id)?.version).toBe(3);
     expect(bySkillId.get(enabled2!.id)?.version).toBe(1);
     expect(bySkillId.has(disabled!.id)).toBe(false);
+
+    await app.close();
+  });
+
+  it('omits the skills prompt slot and writes no run_skills rows when the agent has no linked skills', async () => {
+    const app = await appWith();
+    const { pr } = await setupRepoAndPr();
+
+    const agent = (
+      await app.inject({
+        method: 'POST',
+        url: '/agents',
+        payload: { name: 'Bare Reviewer', provider: 'openai', model: 'gpt-4.1', system_prompt: 'sec' },
+      })
+    ).json();
+
+    // No agent_skills links at all.
+    const res = await app.inject({
+      method: 'POST',
+      url: `/pulls/${pr.id}/review`,
+      payload: { agentId: agent.id },
+    });
+    expect(res.statusCode).toBe(200);
+    const runId = res.json().runs[0].run_id;
+
+    await waitForPrRuns(pg.handle.db, pr.id, { expected: 1 });
+
+    // The prompt's skills slot is null (omit-when-empty), not an empty section.
+    const trace = (await app.inject({ method: 'GET', url: `/runs/${runId}/trace` })).json();
+    expect(trace.prompt_assembly.skills).toBeNull();
+
+    const runSkillRows = await pg.handle.db
+      .select()
+      .from(t.runSkills)
+      .where(eq(t.runSkills.runId, runId));
+    expect(runSkillRows).toHaveLength(0);
+
+    await app.close();
+  });
+
+  it('records usage best-effort: a run_skills write failure does not fail the review', async () => {
+    const app = await appWith();
+    const { pr } = await setupRepoAndPr();
+
+    const agent = (
+      await app.inject({
+        method: 'POST',
+        url: '/agents',
+        payload: { name: 'Best Effort Reviewer', provider: 'openai', model: 'gpt-4.1', system_prompt: 'sec' },
+      })
+    ).json();
+    const [skill] = await pg.handle.db
+      .insert(t.skills)
+      .values({
+        workspaceId,
+        name: 'Guard clauses',
+        description: 'Prefer guard clauses.',
+        type: 'convention',
+        source: 'manual',
+        body: 'Prefer early returns / guard clauses.',
+        enabled: true,
+        version: 1,
+      })
+      .returning();
+    await pg.handle.db.insert(t.agentSkills).values({ agentId: agent.id, skillId: skill!.id, order: 0 });
+
+    // Force recordRunSkills to throw by removing its target table. The skill
+    // still reaches the prompt (getEnabledAgentSkills reads agent_skills+skills,
+    // not run_skills); only the secondary usage insert fails, and the executor
+    // swallows it so an already-persisted review isn't turned into a failed run.
+    await pg.handle.db.execute(sql`DROP TABLE "run_skills"`);
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: `/pulls/${pr.id}/review`,
+        payload: { agentId: agent.id },
+      });
+      expect(res.statusCode).toBe(200);
+      const runId = res.json().runs[0].run_id;
+
+      await waitForPrRuns(pg.handle.db, pr.id, { expected: 1 });
+
+      // Run reached the success terminal state ('done', not 'failed') and the
+      // review persisted with its verdict despite the usage-insert blowing up.
+      const [run] = await pg.handle.db
+        .select()
+        .from(t.agentRuns)
+        .where(eq(t.agentRuns.id, runId));
+      expect(run?.status).toBe('done');
+      const reviews = await pg.handle.db
+        .select()
+        .from(t.reviews)
+        .where(eq(t.reviews.prId, pr.id));
+      expect(reviews.some((r) => r.verdict === 'approve')).toBe(true);
+    } finally {
+      // Restore the table so the shared fixture is intact for any later test.
+      await pg.handle.db.execute(sql`CREATE TABLE "run_skills" (
+        "run_id" uuid NOT NULL,
+        "skill_id" uuid NOT NULL,
+        "version" integer NOT NULL,
+        "created_at" timestamp with time zone DEFAULT now() NOT NULL,
+        CONSTRAINT "run_skills_run_id_skill_id_pk" PRIMARY KEY("run_id","skill_id")
+      )`);
+      await pg.handle.db.execute(
+        sql`ALTER TABLE "run_skills" ADD CONSTRAINT "run_skills_run_id_agent_runs_id_fk" FOREIGN KEY ("run_id") REFERENCES "public"."agent_runs"("id") ON DELETE cascade`,
+      );
+      await pg.handle.db.execute(
+        sql`ALTER TABLE "run_skills" ADD CONSTRAINT "run_skills_skill_id_skills_id_fk" FOREIGN KEY ("skill_id") REFERENCES "public"."skills"("id") ON DELETE cascade`,
+      );
+    }
 
     await app.close();
   });

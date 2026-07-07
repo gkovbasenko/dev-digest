@@ -9,8 +9,10 @@ const {
   mockRestorePending,
   mockVersions,
   mockVersionsLoading,
+  mockVersionsError,
   mockStats,
   mockStatsLoading,
+  mockStatsError,
 } = vi.hoisted(() => ({
   mockUpdateMutate: vi.fn(),
   mockDeleteMutate: vi.fn(),
@@ -18,8 +20,10 @@ const {
   mockRestorePending: { current: false },
   mockVersions: { current: [] as SkillVersion[] },
   mockVersionsLoading: { current: false },
+  mockVersionsError: { current: false },
   mockStats: { current: undefined as SkillStats | undefined },
   mockStatsLoading: { current: false },
+  mockStatsError: { current: false },
 }));
 
 // SkillDetail renders the real SkillPreview (Config tab), PreviewTab,
@@ -29,14 +33,14 @@ vi.mock("../../../../../lib/hooks/skills", () => ({
   useUpdateSkill: () => ({ mutate: mockUpdateMutate, isPending: false }),
   useDeleteSkill: () => ({ mutate: mockDeleteMutate, isPending: false }),
   useSkillVersions: () => ({
-    data: mockVersions.current,
+    data: mockVersionsError.current ? undefined : mockVersions.current,
     isLoading: mockVersionsLoading.current,
-    isError: false,
+    isError: mockVersionsError.current,
   }),
   useSkillStats: () => ({
-    data: mockStats.current,
+    data: mockStatsError.current ? undefined : mockStats.current,
     isLoading: mockStatsLoading.current,
-    isError: false,
+    isError: mockStatsError.current,
   }),
   useRestoreSkillVersion: () => ({ mutate: mockRestoreMutate, isPending: mockRestorePending.current }),
 }));
@@ -55,8 +59,10 @@ afterEach(() => {
   mockRestorePending.current = false;
   mockVersions.current = [];
   mockVersionsLoading.current = false;
+  mockVersionsError.current = false;
   mockStats.current = undefined;
   mockStatsLoading.current = false;
+  mockStatsError.current = false;
 });
 
 const SKILL: Skill = {
@@ -209,5 +215,22 @@ describe("SkillDetail — Versions tab restore", () => {
     expect(mockRestoreMutate).not.toHaveBeenCalled();
 
     confirmSpy.mockRestore();
+  });
+});
+
+describe("SkillDetail — Stats/Versions error states", () => {
+  it("shows an error state when stats fail to load", () => {
+    mockStatsError.current = true;
+    renderDetail("stats");
+    expect(screen.getByText("Couldn't load stats")).toBeInTheDocument();
+    // The stat rows are not rendered when the query errors.
+    expect(screen.queryByText("Agents using this skill")).not.toBeInTheDocument();
+  });
+
+  it("shows an error state when versions fail to load", () => {
+    mockVersionsError.current = true;
+    renderDetail("versions");
+    expect(screen.getByText("Couldn't load versions")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Restore" })).not.toBeInTheDocument();
   });
 });

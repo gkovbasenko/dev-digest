@@ -5,6 +5,14 @@ Newest first. See `.claude/skills/engineering-insights/SKILL.md` for what belong
 
 ---
 
+## 2026-07-07 — `Badge` is `white-space: nowrap`; never use it for sentence-length content, especially inside a grid column
+
+`vendor/ui/primitives/Badge.tsx` hard-codes `whiteSpace: "nowrap"` (with default `overflow: visible`). A Badge wrapping a short tag is fine, but a Badge wrapping a full sentence renders as one unbroken line as wide as the sentence — and since a CSS grid track (`gridTemplateColumns: minmax(0,1fr) minmax(0,1fr)`) has a fixed width, the overflow doesn't widen the track, it **visually spills over and paints on top of the adjacent column**. This bit the PR Overview when Intent + Blast Radius became two columns: `IntentCard` rendered `in_scope`/`out_of_scope` (LLM-generated *sentences*, e.g. "Return 429 with Retry-After header") as Badges, which overlapped the Blast panel. It looked fine before only because Intent was full-width. Fixed by rendering scope items as a wrapping ✓/✗ checklist (`overflowWrap: "anywhere"`) instead of Badges.
+
+**How to apply:** Badge = short label/tag only. For any variable-length or user/LLM-generated string, use a text element with `overflowWrap: "anywhere"` and `minWidth: 0` on its flex/grid ancestors. When moving a previously full-width panel into a grid column, audit it for `nowrap` content (Badges, `MonoLink` paths) that had room before but now overflows.
+
+**Evidence:** `client/src/vendor/ui/primitives/Badge.tsx` (`whiteSpace: "nowrap"`), `client/src/app/repos/[repoId]/pulls/[number]/_components/IntentCard/IntentCard.tsx` (`ScopeList` replacing the scope Badges), `OverviewTab/styles.ts` (`columns` grid); reported as "Intent text overrides Blast panel" this session.
+
 ## 2026-07-06 — SmartDiffViewer's patch join reuses `usePullDetail`; it is NOT a new staleness surface, and the patch must not be duplicated into the smart-diff response
 
 `SmartDiffViewer` joins each file's `patch` from `usePullDetail(prId).files` by path (the `/pulls/:id/smart-diff` payload is deliberately patch-less). A review flagged this as a "stale / wrong-PR patch" bug (80% conf). It isn't: `usePullDetail` is keyed `["pull", prId]` with `prId` a stable per-PR uuid (`lib/hooks/core.ts:116`), so it can never return a *different* PR's data — the "from a different PR entirely" premise is false. And the **Original**-order diff already renders from the same `usePullDetail` files (`DiffTab.tsx:15,83`, sourced in `page.tsx`), so Smart order adds no source the page didn't already depend on. Residual same-PR staleness (PR force-pushed, cache not yet refetched) is shared with the Original view and self-heals via TanStack refetch (`refetchOnWindowFocus` + 60s interval on the sibling pull queries).

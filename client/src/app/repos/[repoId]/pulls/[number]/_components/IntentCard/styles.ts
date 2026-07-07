@@ -18,13 +18,32 @@ export const s = {
   summary: {
     fontSize: 14,
     lineHeight: 1.6,
+    fontStyle: "italic",
     color: "var(--text-secondary)",
     margin: 0,
+    // Long paths/URLs in the intent must break, not overflow the column.
+    overflowWrap: "anywhere",
   } satisfies CSSProperties,
-  chipRow: {
+  scopeList: {
     display: "flex",
-    flexWrap: "wrap",
+    flexDirection: "column",
+    gap: 6,
+    listStyle: "none",
+    margin: 0,
+    padding: 0,
+  } satisfies CSSProperties,
+  scopeItem: {
+    display: "flex",
+    alignItems: "flex-start",
     gap: 8,
+    minWidth: 0,
+  } satisfies CSSProperties,
+  scopeText: {
+    fontSize: 13.5,
+    lineHeight: 1.5,
+    color: "var(--text-secondary)",
+    overflowWrap: "anywhere",
+    minWidth: 0,
   } satisfies CSSProperties,
   empty: {
     display: "flex",

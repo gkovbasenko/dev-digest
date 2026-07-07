@@ -6,26 +6,41 @@ Project-level Claude Code subagents, committed to the repo as shared team specia
 
 | Agent | Model | Tools | Purpose |
 |-------|-------|-------|---------|
-| [implementation-planner](implementation-planner.md) | opus | Read, Grep, Glob, Bash, Skill, AskUserQuestion | Read-only. Turns given requirements into an **Implementation Plan** — verifies/clarifies the requirements, asks multi- vs single-agent mode, decomposes into skill-tagged tasks. Does not author the spec; never writes code. |
+| [spec-creator](spec-creator.md) | opus | Read, Grep, Glob, Bash, Write, Edit, Skill, AskUserQuestion, Task | Authors one SDD **specification** with EARS acceptance criteria, grounded in code + designs; interactive, hunts gaps/edge-cases/UX. Writes only under `specs/`; never touches product code. |
+| [implementation-planner](implementation-planner.md) | opus | Read, Grep, Glob, Bash, Write, Skill, AskUserQuestion, Task | Turns given requirements into an **Implementation Plan** — verifies/clarifies the requirements, asks multi- vs single-agent mode, decomposes into skill-tagged tasks. Does not author the spec; writes **only** its plan to `docs/plans/`, never code. |
 | [implementer](implementer.md) | sonnet | Read, Edit, Write, Bash, Grep, Glob, Skill | Executes **one** scoped plan task (backend or UI), loads the right skill set for its module, self-verifies via typecheck + existing tests, reviews only its own diff. |
 | [researcher](researcher.md) | sonnet | Read, Grep, Glob, Bash | Read-only. Finds/verifies information in the codebase; no web access; never edits. |
 | [web-researcher](web-researcher.md) | sonnet | WebSearch, WebFetch | Read-only. Finds/verifies information on the internet, with links; no filesystem access. |
 | [test-writer](test-writer.md) | sonnet | Read, Edit, Write, Bash, Grep, Glob, Skill | Writes automated tests (backend or UI), one module per run, in parallel; iterates until the suite is green. |
-| [architecture-reviewer](architecture-reviewer.md) | opus | Read, Grep, Glob, Bash, Skill | Read-only. Reviews architecture — boundaries, dependency direction, coupling — high-signal findings only. |
-| [plan-verifier](plan-verifier.md) | opus | Read, Grep, Glob, Bash, Skill | Read-only. Verifies a Development Plan's requirements are implemented AND verified; per-requirement PASS/PARTIAL/FAIL. |
+| [architecture-reviewer](architecture-reviewer.md) | sonnet | Read, Grep, Glob, Bash, Skill | Read-only. Reviews architecture — boundaries, dependency direction, coupling — high-signal findings only. |
+| [plan-verifier](plan-verifier.md) | sonnet | Read, Grep, Glob, Bash, Skill | Read-only. Verifies a Development Plan's requirements are implemented AND verified; per-requirement PASS/PARTIAL/FAIL. |
 | [doc-writer](doc-writer.md) | sonnet | Read, Edit, Write, Bash, Grep, Glob, Skill | Writes documentation grounded in real code — Diátaxis-typed, placed by destination table, Mermaid for diagrams. |
 
-Typical flow: **researcher** / **web-researcher** gather context (codebase and internet respectively) → **implementation-planner** turns the requirements into an Implementation Plan → several **implementer** and **test-writer** agents run in parallel over the plan's disjoint tasks (or one implementer runs them sequentially, if single-agent mode was chosen) → **architecture-reviewer** and **plan-verifier** check the result (quality and requirement-coverage respectively) → **doc-writer** documents it.
+Typical flow: **spec-creator** authors the spec under `specs/` (human-approved) → **researcher** / **web-researcher** gather context (codebase and internet respectively) → **implementation-planner** turns the approved spec into an Implementation Plan (trusting the spec) and persists it to `docs/plans/<slug>.plan.md` so a separate execution chat can read it → several **implementer** (and **test-writer**) agents run in parallel over the plan's disjoint tasks, or one implementer sequentially in single-agent mode → an integration `typecheck + test` gate catches parallel-merge breakage → **architecture-reviewer** (boundaries) and the **`/code-review`** skill (correctness bugs) run alongside test-writing → **plan-verifier** grades requirement coverage against the spec's `AC-N` (final gate; it runs the suite) → **doc-writer** documents it.
+
+The three review axes are distinct and all needed: **architecture-reviewer = boundaries**, **`/code-review` = correctness bugs**, **plan-verifier = requirement coverage**. Don't expect any one of them to catch another's class of problem. `plan-verifier` stays the **final** gate (it grades the real test run, so it needs test-writer's tests and reviewer fixes already in place) — for an early completeness check, use the cheap integration gate, not plan-verifier.
 
 ---
 
-## implementation-planner
+## spec-creator
 
-Read-only agent that turns **already-defined requirements** into a structured **Implementation Plan** that `implementer` agents can execute. It does not author the specification — requirements are its input. It first verifies those requirements against the codebase, clarifies ambiguities via `AskUserQuestion`, recommends better ways to implement, and asks whether to run in multi-agent (parallel) or single-agent (one pass) mode. It knows all five modules, encodes the project's standing constraints (shared-contract mirror, DI container, generated migrations, reviewer-core purity, e2e JSON-only), reads the relevant `INSIGHTS.md` files, and tags every task with the exact skills the implementer must load.
+Interactive agent that authors **one SDD specification** — the *what*, upstream of the planner's *how*. It grounds itself in the real code and any designs the user provides, hunts for gaps / uncovered edge-cases / cross-module communication / UX issues, asks clarifying questions via `AskUserQuestion`, and writes the spec flat under `specs/` as `SPEC-<YYYY-MM-DD>-<slug>.md`. Acceptance criteria are written in **EARS** (each `AC-N` gets a `Verify:` line), which `plan-verifier` later grades against. Reads only the `INSIGHTS.md` of modules the feature touches; delegates fan-out lookups to `researcher`. Writes **only** under `specs/` — never product code.
 
 **Based on:**
 
-- **Read-only planning + self-contained specs** — modeled on Claude Code's built-in Plan agent (read-only; Write/Edit denied) and the "self-contained spec" guidance: name the files/interfaces, state what's out of scope, end with an end-to-end verification step.
+- **Spec-Driven Development** — pin the *what* (testable requirements) before the *how*, as a reviewed artifact the planner consumes.
+  Source: [Addy Osmani — how to write a good spec](https://addyosmani.com/blog/good-spec/) (practitioner, medium-high)
+- **EARS acceptance criteria** — the five patterns (ubiquitous / event / state / unwanted / optional) that collapse a fuzzy requirement into one unambiguous, testable statement.
+  Source: Alistair Mavin et al., *EARS (Easy Approach to Requirements Syntax)*, Rolls-Royce, 2009 (originating paper, high)
+- **Writer ≠ grader / read-only tool scoping** — same principle as the reviewer agents: the spec is the external reference `plan-verifier` grades against, and the agent is scoped to `specs/` so it can't drift into code.
+
+## implementation-planner
+
+Read-only-over-code agent that turns **already-defined requirements** into a structured **Implementation Plan** that `implementer` agents can execute — and **persists that plan to `docs/plans/<slug>.plan.md`** (its one and only write target) so a separate execution chat can read it from disk. It does not author the specification — requirements are its input. It first verifies those requirements against the codebase, clarifies ambiguities via `AskUserQuestion`, recommends better ways to implement, and asks whether to run in multi-agent (parallel) or single-agent (one pass) mode. It knows all five modules, encodes the project's standing constraints (shared-contract mirror, DI container, generated migrations, reviewer-core purity, e2e JSON-only), reads the relevant `INSIGHTS.md` files, and tags every task with the exact skills the implementer must load.
+
+**Based on:**
+
+- **Read-only planning + self-contained specs** — modeled on Claude Code's built-in Plan agent (read-only over code; its **only** write target is its own plan file under `docs/plans/`, so a separate execution chat can read it) and the "self-contained spec" guidance: name the files/interfaces, state what's out of scope, end with an end-to-end verification step.
   Sources: [sub-agents docs](https://code.claude.com/docs/en/sub-agents) (official, high) · [best practices](https://code.claude.com/docs/en/best-practices) (official, high)
 - **Non-overlapping, explicitly-scoped task decomposition** — vague task scoping causes duplicated work, so each task gets an objective, an out-of-scope, and disjoint file sets.
   Source: [Anthropic — multi-agent research system](https://www.anthropic.com/engineering/multi-agent-research-system) (official, high)

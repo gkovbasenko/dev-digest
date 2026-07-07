@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api";
-import type { Skill, AgentSkillLink, SkillType } from "@devdigest/shared";
+import type { Skill, AgentSkillLink, SkillType, SkillVersion, SkillStats } from "@devdigest/shared";
 
 export function useSkills() {
   return useQuery({
@@ -79,6 +79,42 @@ export function useImportSkill() {
   return useMutation({
     mutationFn: (input: ImportSkillInput) => api.post<Skill>("/skills/import", input),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["skills"] }),
+  });
+}
+
+export function useSkillVersions(id: string | null | undefined) {
+  return useQuery({
+    queryKey: ["skill-versions", id],
+    queryFn: () => api.get<SkillVersion[]>(`/skills/${id}/versions`),
+    enabled: !!id,
+  });
+}
+
+export function useSkillStats(id: string | null | undefined) {
+  return useQuery({
+    queryKey: ["skill-stats", id],
+    queryFn: () => api.get<SkillStats>(`/skills/${id}/stats`),
+    enabled: !!id,
+  });
+}
+
+export interface RestoreSkillVersionInput {
+  id: string;
+  version: number;
+}
+
+export function useRestoreSkillVersion() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, version }: RestoreSkillVersionInput) =>
+      api.post<Skill>(`/skills/${id}/restore`, { version }),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["skills"] });
+      qc.invalidateQueries({ queryKey: ["skill", data.id] });
+      qc.invalidateQueries({ queryKey: ["skill-versions", data.id] });
+      qc.invalidateQueries({ queryKey: ["skill-stats", data.id] });
+      qc.setQueryData(["skill", data.id], data);
+    },
   });
 }
 

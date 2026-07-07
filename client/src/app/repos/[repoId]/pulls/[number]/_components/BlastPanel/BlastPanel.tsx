@@ -160,8 +160,9 @@ function PriorPrRow({ item, repoId }: { item: PrHistoryItem; repoId: string }) {
 
 function PriorPrsAccordion({ prId, repoId }: { prId: string | null; repoId: string }) {
   const t = useTranslations("prReview");
+  const tc = useTranslations("common");
   const [open, setOpen] = React.useState(false);
-  const { data } = usePriorPrs(prId);
+  const { data, isLoading } = usePriorPrs(prId);
   const history = data?.history ?? [];
 
   return (
@@ -185,11 +186,17 @@ function PriorPrsAccordion({ prId, repoId }: { prId: string | null; repoId: stri
           }}
         />
         <span style={s.priorPrsTitle}>{t("blast.priorPrs.title")}</span>
-        <Badge>{t("blast.priorPrs.count", { count: history.length })}</Badge>
+        {/* Show the count only once loaded — otherwise the badge flashes
+            "0 PRs" during the initial fetch, reading as "none found". */}
+        {!isLoading && data && (
+          <Badge>{t("blast.priorPrs.count", { count: history.length })}</Badge>
+        )}
       </div>
       {open && (
         <div style={s.priorPrsBody}>
-          {history.length > 0 ? (
+          {isLoading ? (
+            <div style={s.priorPrsEmpty}>{tc("states.loading")}</div>
+          ) : history.length > 0 ? (
             history.map((item) => (
               <PriorPrRow key={item.pr_number} item={item} repoId={repoId} />
             ))

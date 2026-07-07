@@ -27,6 +27,26 @@ const BLAST_FULL = {
   reason: null,
 };
 
+// A symbol whose affected endpoint is a bare path with no "METHOD " prefix —
+// exercises parseEndpoint's `idx === -1` branch.
+const BLAST_BARE_ENDPOINT = {
+  changed_symbols: [{ name: "healthProbe", file: "src/health.ts", kind: "function" }],
+  downstream: [
+    {
+      symbol: "healthProbe",
+      callers: [{ name: "server", file: "src/server.ts", line: 5 }],
+      endpoints_affected: ["/internal/health"],
+      crons_affected: [],
+    },
+  ],
+  impacted_endpoints: ["/internal/health"],
+  impacted_crons: [],
+  summary: "",
+  index_status: "full" as const,
+  degraded: false,
+  reason: null,
+};
+
 // One changed symbol with callers + one with none: only the former is shown.
 const BLAST_MIXED = {
   changed_symbols: [
@@ -112,11 +132,12 @@ const PRIOR_PRS_EMPTY = { history: [] };
 let blastData: unknown = BLAST_FULL;
 let blastError = false;
 let priorPrsData: unknown = PRIOR_PRS_EMPTY;
+let priorPrsLoading = false;
 const refetchSpy = vi.fn();
 
 vi.mock("@/lib/hooks/blast", () => ({
   useBlast: () => ({ data: blastData, isError: blastError, refetch: refetchSpy }),
-  usePriorPrs: () => ({ data: priorPrsData }),
+  usePriorPrs: () => ({ data: priorPrsData, isLoading: priorPrsLoading }),
 }));
 
 import { BlastPanel } from "./BlastPanel";
@@ -126,6 +147,7 @@ afterEach(() => {
   blastData = BLAST_FULL;
   blastError = false;
   priorPrsData = PRIOR_PRS_EMPTY;
+  priorPrsLoading = false;
   refetchSpy.mockClear();
 });
 
@@ -244,6 +266,32 @@ describe("BlastPanel", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("renders a bare-path endpoint chip (no METHOD prefix) without a method label", () => {
+    blastData = BLAST_BARE_ENDPOINT;
+    renderWithIntl(<BlastPanel prId="pr1" repoId="repo1" repoFullName="acme/widgets" headSha="abc123" />);
+    // parseEndpoint's no-method branch: the chip is just the path.
+    expect(screen.getByText("/internal/health")).toBeInTheDocument();
+  });
+
+  it("switches to the graph placeholder and hides the symbol tree when Graph is selected", () => {
+    renderWithIntl(<BlastPanel prId="pr1" repoId="repo1" repoFullName="acme/widgets" headSha="abc123" />);
+    expect(screen.getByText("processPayment")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: prReviewMessages.blast.graphView }));
+
+    expect(screen.getByText(prReviewMessages.blast.graphPlaceholder)).toBeInTheDocument();
+    expect(screen.queryByText("processPayment")).not.toBeInTheDocument();
+  });
+
+  it("collapses a symbol block via keyboard (Enter on the header)", () => {
+    renderWithIntl(<BlastPanel prId="pr1" repoId="repo1" repoFullName="acme/widgets" headSha="abc123" />);
+    expect(screen.getByText("src/billing/refund.ts:10")).toBeInTheDocument();
+
+    // The header is a role=button; Enter toggles it (keyboard a11y).
+    fireEvent.keyDown(screen.getByText("processPayment"), { key: "Enter" });
+    expect(screen.queryByText("src/billing/refund.ts:10")).not.toBeInTheDocument();
+  });
+
   describe("Prior PRs touching these files accordion", () => {
     it("expands to render prior-PR rows from usePriorPrs, most-recent first, each linking to its PR", () => {
       priorPrsData = PRIOR_PRS_SOME;
@@ -270,6 +318,20 @@ describe("BlastPanel", () => {
 
       fireEvent.click(screen.getByText("Prior PRs touching these files"));
       expect(screen.getByText("No prior merged PRs touched these files.")).toBeInTheDocument();
+    });
+
+    it("does not flash a '0 PRs' count or empty state while the query is still loading", () => {
+      priorPrsData = undefined;
+      priorPrsLoading = true;
+      renderWithIntl(<BlastPanel prId="pr1" repoId="repo1" repoFullName="acme/widgets" headSha="abc123" />);
+
+      // No count badge yet (would otherwise read "0 PRs").
+      expect(screen.queryByText("0 PRs")).not.toBeInTheDocument();
+      // And the body shows a loader, not the "no prior PRs" empty state.
+      fireEvent.click(screen.getByText("Prior PRs touching these files"));
+      expect(
+        screen.queryByText("No prior merged PRs touched these files."),
+      ).not.toBeInTheDocument();
     });
   });
 });

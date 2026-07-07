@@ -84,6 +84,22 @@ describe('toPrBlastResponse', () => {
     ]);
   });
 
+  it('leaves a caller\'s endpoints/crons empty when its file is absent from factsByFile', () => {
+    const blast: BlastResult = {
+      changedSymbols: [{ file: 'src/a.ts', name: 'foo', kind: 'function' }],
+      callers: [{ file: 'src/x.ts', symbol: 'cx', viaSymbol: 'foo', line: 1, rank: 0 }],
+      impactedEndpoints: [],
+      // factsByFile is present, but has no entry for the caller's file (src/x.ts).
+      factsByFile: { 'src/other.ts': { endpoints: ['GET /other'], crons: ['nightly'] } },
+      degraded: false,
+    };
+    const result = toPrBlastResponse(blast, indexState());
+    expect(result.downstream[0]!.endpoints_affected).toEqual([]);
+    expect(result.downstream[0]!.crons_affected).toEqual([]);
+    expect(result.impacted_endpoints).toEqual([]);
+    expect(result.impacted_crons).toEqual([]);
+  });
+
   it('unions impacted_endpoints / impacted_crons flat and deduped across all downstream groups', () => {
     const blast: BlastResult = {
       changedSymbols: [
@@ -126,6 +142,20 @@ describe('toPrBlastResponse', () => {
     expect(result.index_status).toBe('degraded');
     expect(result.degraded).toBe(true);
     expect(result.reason).toBe('No index data is available for this repo yet.');
+  });
+
+  it('falls back to the raw reason code when the DegradedReason is not enumerated', () => {
+    // Forward-compat: a reason the mapper doesn't have a human message for yet
+    // must surface as its raw code, never vanish (reasonMessage's `?? reason`).
+    const blast: BlastResult = {
+      changedSymbols: [],
+      callers: [],
+      impactedEndpoints: [],
+      degraded: true,
+      reason: 'some_future_reason' as unknown as BlastResult['reason'],
+    };
+    const result = toPrBlastResponse(blast, indexState({ status: 'degraded' }));
+    expect(result.reason).toBe('some_future_reason');
   });
 
   it('derives degraded from index status when the facade result omits it', () => {

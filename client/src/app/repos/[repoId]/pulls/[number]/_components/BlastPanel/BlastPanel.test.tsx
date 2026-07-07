@@ -106,6 +106,19 @@ const BLAST_FAILED = {
   reason: null,
 };
 
+// Partial index with no explicit reason → the panel falls back to the
+// index_status="partial" message (distinct from degraded/failed).
+const BLAST_PARTIAL = {
+  changed_symbols: [],
+  downstream: [],
+  impacted_endpoints: [],
+  impacted_crons: [],
+  summary: "",
+  index_status: "partial" as const,
+  degraded: true,
+  reason: null,
+};
+
 const PRIOR_PRS_SOME = {
   history: [
     {
@@ -133,11 +146,12 @@ let blastData: unknown = BLAST_FULL;
 let blastError = false;
 let priorPrsData: unknown = PRIOR_PRS_EMPTY;
 let priorPrsLoading = false;
+let priorPrsError = false;
 const refetchSpy = vi.fn();
 
 vi.mock("@/lib/hooks/blast", () => ({
   useBlast: () => ({ data: blastData, isError: blastError, refetch: refetchSpy }),
-  usePriorPrs: () => ({ data: priorPrsData, isLoading: priorPrsLoading }),
+  usePriorPrs: () => ({ data: priorPrsData, isLoading: priorPrsLoading, isError: priorPrsError }),
 }));
 
 import { BlastPanel } from "./BlastPanel";
@@ -148,6 +162,7 @@ afterEach(() => {
   blastError = false;
   priorPrsData = PRIOR_PRS_EMPTY;
   priorPrsLoading = false;
+  priorPrsError = false;
   refetchSpy.mockClear();
 });
 
@@ -257,6 +272,12 @@ describe("BlastPanel", () => {
     expect(screen.getByText("No changed symbols detected")).toBeInTheDocument();
   });
 
+  it("shows the partial-index message in the degraded badge when index_status is 'partial' and reason is null", () => {
+    blastData = BLAST_PARTIAL;
+    renderWithIntl(<BlastPanel prId="pr1" repoId="repo1" repoFullName="acme/widgets" headSha="abc123" />);
+    expect(screen.getByText(prReviewMessages.blast.indexStatus.partial)).toBeInTheDocument();
+  });
+
   it("renders caller rows as plain text (not links) when repoFullName/headSha are null", () => {
     renderWithIntl(<BlastPanel prId="pr1" repoId="repo1" repoFullName={null} headSha={null} />);
     // The file:line still shows so the map isn't lost, just without a deep link.
@@ -329,6 +350,18 @@ describe("BlastPanel", () => {
       expect(screen.queryByText("0 PRs")).not.toBeInTheDocument();
       // And the body shows a loader, not the "no prior PRs" empty state.
       fireEvent.click(screen.getByText("Prior PRs touching these files"));
+      expect(
+        screen.queryByText("No prior merged PRs touched these files."),
+      ).not.toBeInTheDocument();
+    });
+
+    it("shows an error state — not a false 'no prior PRs' — when the query fails", () => {
+      priorPrsData = undefined;
+      priorPrsError = true;
+      renderWithIntl(<BlastPanel prId="pr1" repoId="repo1" repoFullName="acme/widgets" headSha="abc123" />);
+
+      fireEvent.click(screen.getByText("Prior PRs touching these files"));
+      expect(screen.getByText(commonMessages.states.error)).toBeInTheDocument();
       expect(
         screen.queryByText("No prior merged PRs touched these files."),
       ).not.toBeInTheDocument();

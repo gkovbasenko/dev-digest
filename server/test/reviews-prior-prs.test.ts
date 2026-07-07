@@ -74,6 +74,17 @@ describe('groupPriorPrRows', () => {
     expect(result[0]!.merged_at).toBe('');
   });
 
+  it('keeps first-seen order (stable sort) and empty merged_at when every updatedAt is null', () => {
+    const rows: PriorPrFileRow[] = [
+      { prId: 'pr-a', number: 1, title: 'A', author: 'a', updatedAt: null, path: 'x.ts' },
+      { prId: 'pr-b', number: 2, title: 'B', author: 'b', updatedAt: null, path: 'y.ts' },
+    ];
+    const result = groupPriorPrRows(rows, 10);
+    // All updatedAt null → every comparison is 0 → insertion order preserved.
+    expect(result.map((r) => r.pr_number)).toEqual([1, 2]);
+    expect(result.every((r) => r.merged_at === '')).toBe(true);
+  });
+
   it('returns an empty array for no rows', () => {
     expect(groupPriorPrRows([], 10)).toEqual([]);
   });

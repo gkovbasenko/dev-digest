@@ -162,7 +162,7 @@ function PriorPrsAccordion({ prId, repoId }: { prId: string | null; repoId: stri
   const t = useTranslations("prReview");
   const tc = useTranslations("common");
   const [open, setOpen] = React.useState(false);
-  const { data, isLoading } = usePriorPrs(prId);
+  const { data, isLoading, isError } = usePriorPrs(prId);
   const history = data?.history ?? [];
 
   return (
@@ -196,6 +196,9 @@ function PriorPrsAccordion({ prId, repoId }: { prId: string | null; repoId: stri
         <div style={s.priorPrsBody}>
           {isLoading ? (
             <div style={s.priorPrsEmpty}>{tc("states.loading")}</div>
+          ) : isError ? (
+            // Don't render a failed query as "no prior PRs" — say it errored.
+            <div style={s.priorPrsEmpty}>{tc("states.error")}</div>
           ) : history.length > 0 ? (
             history.map((item) => (
               <PriorPrRow key={item.pr_number} item={item} repoId={repoId} />

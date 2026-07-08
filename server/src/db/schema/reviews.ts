@@ -59,4 +59,6 @@ export const prBrief = pgTable('pr_brief', {
     .primaryKey()
     .references(() => pullRequests.id, { onDelete: 'cascade' }),
   json: jsonb('json').notNull(),
+  generatedAt: timestamp('generated_at', { withTimezone: true }),
+  generationHeadSha: text('generation_head_sha'),
 });

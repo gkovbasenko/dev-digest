@@ -1,3 +1,4 @@
+import { eq } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 import type { Finding, Intent, RunSummary, RunTrace } from '@devdigest/shared';
@@ -136,6 +137,29 @@ export class ReviewRepository {
 
   getIntent(prId: string): Promise<Intent | undefined> {
     return pullRepo.getIntent(this.db, prId);
+  }
+
+  // ---- brief (Why+Risk; single row per PR) ---------------------------------
+
+  async getBrief(prId: string): Promise<typeof t.prBrief.$inferSelect | undefined> {
+    const [row] = await this.db.select().from(t.prBrief).where(eq(t.prBrief.prId, prId));
+    return row;
+  }
+
+  /** Single row per PR (PK `prId`, AC-5) — overwrite on every regeneration. */
+  async upsertBrief(
+    prId: string,
+    values: { json: unknown; generatedAt: Date; generationHeadSha: string },
+  ): Promise<void> {
+    const set = {
+      json: values.json,
+      generatedAt: values.generatedAt,
+      generationHeadSha: values.generationHeadSha,
+    };
+    await this.db
+      .insert(t.prBrief)
+      .values({ prId, ...set })
+      .onConflictDoUpdate({ target: t.prBrief.prId, set });
   }
 
   // ---- prior PRs (blast: "prior PRs touching these files") ---------------

@@ -155,5 +155,29 @@
       "filesOverlap": "{count} files",
       "empty": "No prior merged PRs touched these files."
     }
+  },
+  "brief": {
+    "title": "Why + Risk Brief",
+    "emptyTitle": "No brief generated yet",
+    "generate": "Generate brief",
+    "regenerate": "Regenerate",
+    "generatedAt": "Generated {when}",
+    "staleHint": "New commits since this brief — regenerate to refresh.",
+    "regenerateFailed": "Couldn’t regenerate the brief.",
+    "retry": "Retry",
+    "what": "What",
+    "why": "Why",
+    "riskLevel": {
+      "high": "High risk",
+      "medium": "Medium risk",
+      "low": "Low risk"
+    },
+    "severity": {
+      "high": "High",
+      "medium": "Medium",
+      "low": "Low"
+    },
+    "risksTitle": "Risks",
+    "reviewFocusTitle": "Read these first"
   }
 }

@@ -71,6 +71,33 @@ export const Risks = z.object({
 });
 export type Risks = z.infer<typeof Risks>;
 
+// ---- Review focus ----
+export const ReviewFocusItem = z.object({
+  file: z.string(),
+  line: z.number().int().optional(),
+  note: z.string(),
+});
+export type ReviewFocusItem = z.infer<typeof ReviewFocusItem>;
+
+// ---- Risk Brief (Why+Risk brief; pr_brief.json going forward) ----
+export const RiskBrief = z.object({
+  what: z.string(),
+  why: z.string(),
+  risk_level: RiskSeverity,
+  risks: z.array(Risk),
+  review_focus: z.array(ReviewFocusItem),
+});
+export type RiskBrief = z.infer<typeof RiskBrief>;
+
+// ---- Risk Brief read wrapper (GET /pulls/:id/brief response) ----
+export const BriefRead = z.object({
+  exists: z.boolean(),
+  stale: z.boolean(),
+  generated_at: z.string().nullable(),
+  brief: RiskBrief.nullable(),
+});
+export type BriefRead = z.infer<typeof BriefRead>;
+
 // ---- PR History ----
 export const PrHistoryItem = z.object({
   pr_number: z.number().int(),
@@ -137,6 +164,7 @@ export const SmartDiff = z.object({
 export type SmartDiff = z.infer<typeof SmartDiff>;
 
 // ---- Composed PR Brief (pr_brief.json) ----
+// Superseded by RiskBrief above; kept in place but unused.
 export const PrBrief = z.object({
   intent: Intent,
   blast: BlastRadius,

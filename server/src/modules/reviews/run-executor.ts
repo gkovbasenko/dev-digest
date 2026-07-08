@@ -9,6 +9,8 @@ import { REVIEW_STRATEGY } from './constants.js';
 import { taskLine, stripUntrustedMarkers } from './helpers.js';
 import { loadDiff } from './diff-loader.js';
 import { computeIntent, renderIntent } from './intent/compute.js';
+import { readCloneFile } from '../_shared/clone-read.js';
+import { approxTokens } from '../../adapters/tokenizer/index.js';
 
 /** Thrown by a run when the user cancels it mid-flight (between map files). */
 export class RunCancelledError extends Error {
@@ -222,6 +224,16 @@ export class ReviewRunExecutor {
       const loadedSkills = await this.repo.getEnabledAgentSkills(agent.id);
       const skillBodies = loadedSkills.map((s) => stripUntrustedMarkers(s.body));
 
+      // Project Context folder — agent-attached + enabled-skill-inherited doc
+      // paths, deduped, read fresh from THIS PR's clone (AC-5/9/11/12). Never
+      // fails the run — see buildProjectContext's own try/catch.
+      const { specs, specsRead } = await this.buildProjectContext(
+        agent,
+        repo.clonePath,
+        loadedSkills,
+        runLog,
+      );
+
       // ---- Engine: assemble → single-pass → grounding -----------------------
       // The pure review pipeline lives in @devdigest/reviewer-core (shared with
       // the CI runner). The service owns only I/O: repo-intel context resolution
@@ -241,6 +253,11 @@ export class ReviewRunExecutor {
         ...(repoMap ? { repoMap } : {}),
         // Enabled skills linked to this agent; omitted when the agent has none.
         ...(skillBodies.length ? { skills: skillBodies } : {}),
+        // Project Context folder — agent-attached + enabled-skill-inherited
+        // docs, into the already-wrapUntrusted-wrapped `## Project context`
+        // slot. Omitted when nothing is attached (omit-when-empty, AC-15: zero
+        // new provider calls either way).
+        ...(specs.length ? { specs } : {}),
         // PR author's description/body — untrusted; assemblePrompt wraps +
         // truncates it. Omitted when the PR has no body.
         ...(pull.body ? { prDescription: pull.body } : {}),
@@ -337,7 +354,7 @@ export class ReviewRunExecutor {
         })),
         raw_output: outcome.raw,
         memory_pulled: [],
-        specs_read: [],
+        specs_read: specsRead,
         // Persisted log = the run's FULL event buffer (incl. shared pre-work:
         // diff load + intent), not just events recorded inside this method.
         log: runLog.logFor(runId),
@@ -457,6 +474,83 @@ export class ReviewRunExecutor {
       return `\n\n${hot.length} of ${changedFiles.length} changed file(s) are in the top 5% most-depended-on (high blast risk) — prioritise their correctness.`;
     } catch {
       return '';
+    }
+  }
+
+  /**
+   * Project Context folder (AC-5/9/11/12): collect agent-attached doc paths
+   * (their own order) then enabled-skill-inherited doc paths (skill order
+   * from `loadedSkills`, then per-skill doc order); dedup by path — FIRST
+   * occurrence wins (AC-11); read each fresh from `clonePath` via the
+   * `_shared` realpath-contained reader; **skip** missing/unreadable ones
+   * (Live Log warning naming the path, `(missing)` marker in the returned
+   * `specsRead` — AC-12). Best-effort like `buildCallersDigest`/
+   * `buildRepoMapDigest` — a failure here never fails the run.
+   */
+  private async buildProjectContext(
+    agent: AgentRow,
+    clonePath: string | null,
+    loadedSkills: { id: string; version: number; body: string }[],
+    runLog: RunLogger,
+  ): Promise<{ specs: { source: string; text: string }[]; specsRead: string[] }> {
+    try {
+      const [agentDocs, skillDocsFlat] = await Promise.all([
+        this.repo.getAgentContextDocs(agent.id),
+        this.repo.getSkillContextDocs(loadedSkills.map((s) => s.id)),
+      ]);
+
+      const skillDocsById = new Map<string, { path: string; order: number }[]>();
+      for (const row of skillDocsFlat) {
+        const arr = skillDocsById.get(row.skillId) ?? [];
+        arr.push({ path: row.path, order: row.order });
+        skillDocsById.set(row.skillId, arr);
+      }
+
+      const orderedPaths: string[] = [];
+      const seen = new Set<string>();
+      const addPath = (path: string) => {
+        if (seen.has(path)) return;
+        seen.add(path);
+        orderedPaths.push(path);
+      };
+      for (const doc of agentDocs) addPath(doc.path);
+      for (const skill of loadedSkills) {
+        const docs = (skillDocsById.get(skill.id) ?? []).sort((a, b) => a.order - b.order);
+        for (const doc of docs) addPath(doc.path);
+      }
+
+      if (orderedPaths.length === 0) return { specs: [], specsRead: [] };
+
+      const specs: { source: string; text: string }[] = [];
+      const specsRead: string[] = [];
+      // E1: the Live Log line only ever displays an approximate count, so
+      // don't pay for exact BPE encoding (container.tokenizer.count) here —
+      // docs are already cap-checked with the real tokenizer at attach time
+      // (context-attach.ts). approxTokens is the same cheap chars/4
+      // heuristic the tokenizer adapter itself falls back to for degenerate
+      // content; good enough for a display-only estimate on every run.
+      let estimatedTokens = 0;
+      for (const path of orderedPaths) {
+        const text = clonePath ? await readCloneFile(clonePath, path) : null;
+        if (text == null) {
+          specsRead.push(`${path} (missing)`);
+          runLog.info(`project context: "${path}" not found in this clone — skipped`);
+          continue;
+        }
+        specs.push({ source: path, text });
+        specsRead.push(path);
+        estimatedTokens += approxTokens(text);
+      }
+      if (specs.length > 0) {
+        runLog.info(
+          `project context: ${specs.length}/${orderedPaths.length} doc(s) attached (~${estimatedTokens} token(s) est.)`,
+        );
+      }
+      return { specs, specsRead };
+    } catch (err) {
+      // Never let attachment loading break the run — surface only as a Live Log info.
+      runLog.info(`project context: failed to load — ${(err as Error).message}`);
+      return { specs: [], specsRead: [] };
     }
   }
 

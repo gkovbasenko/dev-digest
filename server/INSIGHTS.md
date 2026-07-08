@@ -5,6 +5,34 @@ Newest first. See `.claude/skills/engineering-insights/SKILL.md` for what belong
 
 ---
 
+## 2026-07-08 — The `*.it.test.ts` (testcontainers) suite DOES run in this sandbox with Colima socket env overrides — earlier "can't attach" notes are incomplete
+
+Prior insights (e.g. the 2026-07-01 skills-concurrency entry) say testcontainers can't attach here and fall back to scratch scripts against the compose DB. That's avoidable: `dockerAvailable()` (`test/helpers/pg.ts`) passes (`docker info` works), and the container runtime is Colima — testcontainers just needs to be pointed at Colima's socket. Running the full `.it` suite green requires:
+
+```
+DOCKER_HOST="unix://$HOME/.colima/default/docker.sock" \
+TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock \
+TESTCONTAINERS_HOST_OVERRIDE=127.0.0.1 \
+TESTCONTAINERS_RYUK_DISABLED=true \
+pnpm test
+```
+
+Without these, `startPg()` fails with `Could not find a working container runtime strategy` and every `.it.test.ts` file errors at `beforeAll` (looks like 19 "failed files" but they're setup failures, not assertion failures). With them, the whole suite runs against throwaway `pgvector/pgvector:pg16` containers — no need to pollute the shared compose `devdigest` DB. Verified this session: full server suite went from 292 passed / 85 skipped to **377 passed / 1 failed** (the lone failure is the pre-existing unrelated `contracts.test.ts > SmartDiff` fixture).
+
+**How to apply:** to actually execute `.it` coverage locally (not just hermetic tests), export the four env vars above. `RYUK_DISABLED=true` sidesteps the reaper container that otherwise trips on the Colima socket. This is the real verification path for DB-backed ACs — prefer it over scratch scripts.
+
+**Evidence:** `server/test/helpers/pg.ts` (`startPg`/`dockerAvailable`), this session (2026-07-08) — the Project Context `.it` suite (`context.it.test.ts`, `agents-context.it.test.ts`, `skills-context.it.test.ts`, `reviews-context.it.test.ts`, `context-ac22.it.test.ts`) all pass under these envs; socket at `unix:///Users/gkovbasenko/.colima/default/docker.sock`.
+
+## 2026-07-08 — `js-tiktoken`'s BPE encode is quadratic-ish on short-period repetitive text — a few KB can hang for 10s+; guard with a cheap pre-check, not a length cutoff
+
+`container.tokenizer.count()` (js-tiktoken `cl100k_base`) is fast on ordinary text regardless of size (400k chars of repeated-sentence prose encoded in ~35ms), but its merge search degrades catastrophically on short-period repetitive input: `"ab".repeat(10000)` (20,000 chars) took 18+ seconds; `"x".repeat(10000)` took 5.8s; `"x".repeat(220000)` did not finish in 20s. This is a **content-shape** problem, not a size problem — a raw `text.length` cutoff either misses the pathological case entirely (it's already too slow well under any size threshold you'd pick) or discards exact counts for every large-but-normal document. Discovered while writing T5's cap-enforcement integration test: a test doc of `'x'.repeat(220000)` (meant to simulate "a doc over the 50k-token cap") hung the whole `tsx` process.
+
+Fix: `looksDegenerate()` in `adapters/tokenizer/index.ts` — an O(n), no-BPE-calls, windowed distinct-trigram scan (4096-char windows, floor of 64 distinct trigrams per window). Real prose/code/markdown clears that floor almost immediately in every window; a short repeating pattern spanning a whole window does not. `TiktokenTokenizer.count()` routes flagged content to the `ceil(chars/4)` heuristic instead of calling `encode()`. This directly matters for any caller feeding **untrusted repo file content** into `count()` — the Project Context discovery list (`token_count` per doc) and the attach-time cap check (T5) both do exactly that; a maliciously or accidentally repetitive `.md` file (e.g. base64 padding, ASCII art, a huge single-value table column) could otherwise DoS the request that was specifically trying to cap its size.
+
+**How to apply:** any new caller that runs `container.tokenizer.count()` (or raw `js-tiktoken`) over content that isn't already size/shape-bounded (i.e. anything sourced from a repo clone, PR body, or other untrusted text) is already covered by this guard — no per-caller change needed. If you ever bypass `TiktokenTokenizer` (e.g. call `js-tiktoken` directly), re-apply the same pre-check. When writing a test that wants "a doc over the token cap," prefer realistic repeated-sentence content or `looksDegenerate`-safe filler over `'x'.repeat(n)` if you need the REAL encoder path exercised; degenerate filler is fine (and now fast) if you only need the cap-rejection behavior.
+
+**Evidence:** `server/src/adapters/tokenizer/index.ts` (`looksDegenerate`, `TiktokenTokenizer.count`); reproduced live: `'x'.repeat(10000)` → 5833ms, `'ab'.repeat(10000)` → 18381ms, `'x'.repeat(220000)` → did not finish in 20s (all via `js-tiktoken@`'s `getEncoding('cl100k_base').encode()`), vs. 400k chars of repeated-sentence prose → 36ms; this session (2026-07-08), surfaced while implementing the Project Context folder plan's T5 (`server/test/agents-context.it.test.ts`).
+
 ## 2026-07-07 — Running dev-digest reviewers on a branch that adds a table fails until you `pnpm db:migrate` the compose `devdigest` DB
 
 The dev-digest app reviews PRs by executing its own running server code against its own DB (compose PG, database `devdigest`, `DATABASE_URL` in `server/.env`). So when a feature branch adds a migration (e.g. `run_skills`) and `pnpm dev` is running that branch's code, `dev_digest_run_review` fails with `relation "<table>" does not exist` until the migration is applied to the `devdigest` DB — running the new `.it.test.ts` against throwaway `it_*` databases does NOT migrate `devdigest`. Fix: `cd server && pnpm db:migrate` (reads `.env`, applies pending migrations to `devdigest`; the `schema "drizzle" already exists` / `__drizzle_migrations already exists` NOTICEs are benign). The failures can be intermittent across agents in one batch (some agent runs don't hit the new table's code path), so a partial "some reviewers passed" result is still the same root cause.

@@ -1,4 +1,3 @@
-import { readFile, realpath } from 'node:fs/promises';
 import { z } from 'zod';
 import type { Container } from '../../platform/container.js';
 import type { ConventionCandidate, SkillType } from '@devdigest/shared';
@@ -6,15 +5,14 @@ import { ConventionCategory } from '@devdigest/shared';
 import { ValidationError } from '../../platform/errors.js';
 import { resolveFeatureModel } from '../settings/feature-models.js';
 import { ConventionsRepository, type InsertConvention } from './repository.js';
-import {
-  buildConventionsPrompt,
-  buildSkillBody,
-  isWithinRoot,
-  resolveClonePath,
-  toConventionDto,
-  verifyEvidence,
-} from './helpers.js';
+import { buildConventionsPrompt, buildSkillBody, toConventionDto, verifyEvidence } from './helpers.js';
 import { CONFIG_FILE_CANDIDATES, SOURCE_SAMPLE_COUNT } from './constants.js';
+import { readCloneFile } from '../_shared/clone-read.js';
+
+// Promoted to `_shared/clone-read.ts` (server INSIGHTS 2026-07-02) — re-exported
+// here so existing imports of `resolveRealClonePath` from this module keep
+// working unchanged (e.g. `test/conventions-helpers.test.ts`).
+export { resolveRealClonePath } from '../_shared/clone-read.js';
 
 const RawCandidate = z.object({
   rule: z.string().min(1),
@@ -39,31 +37,6 @@ export interface SkillBundle {
   description: string;
   type: SkillType;
   body: string;
-}
-
-/**
- * resolveClonePath alone is a syntactic check — it doesn't touch the
- * filesystem, so it can't catch a symlink committed INSIDE the clone that
- * points OUTSIDE it (`git clone` materializes a committed symlink as a real
- * one on checkout). realpath() resolves every symlink in the chain to its
- * true target, so re-checking containment against the real paths is the
- * actual read boundary. Exported for direct (no-DB) unit testing.
- */
-export async function resolveRealClonePath(clonePath: string, file: string): Promise<string | null> {
-  const resolved = resolveClonePath(clonePath, file);
-  if (!resolved) return null;
-  try {
-    const [root, real] = await Promise.all([realpath(clonePath), realpath(resolved)]);
-    return isWithinRoot(root, real) ? real : null;
-  } catch {
-    return null; // doesn't exist, broken symlink, permission error, etc.
-  }
-}
-
-async function readCloneFile(clonePath: string, file: string): Promise<string | null> {
-  const real = await resolveRealClonePath(clonePath, file);
-  if (!real) return null;
-  return readFile(real, 'utf8').catch(() => null);
 }
 
 export class ConventionsService {

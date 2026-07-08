@@ -29,6 +29,24 @@ vi.mock("../../../../../lib/hooks/skills", () => ({
   useSetAgentSkills: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
+// Same stable-reference rationale as EMPTY_SKILLS/EMPTY_AGENT_SKILLS above —
+// ContextTab's useEffect is keyed on useAgentContext()'s result.
+const { EMPTY_DOC_LIST, EMPTY_CONTEXT_LINKS } = vi.hoisted(() => ({
+  EMPTY_DOC_LIST: { indexed: true, documents: [] } as { indexed: boolean; documents: never[] },
+  EMPTY_CONTEXT_LINKS: [] as never[],
+}));
+
+vi.mock("../../../../../lib/hooks/context", () => ({
+  useContextDocs: () => ({ data: EMPTY_DOC_LIST }),
+  useAgentContext: () => ({ data: EMPTY_CONTEXT_LINKS }),
+  useSetAgentContext: () => ({ mutate: vi.fn(), isPending: false }),
+  useContextFilePreview: () => ({ data: undefined, isLoading: false }),
+}));
+
+vi.mock("../../../../../lib/repo-context", () => ({
+  useActiveRepo: () => ({ repoId: "repo1" }),
+}));
+
 import { AgentEditor } from "./AgentEditor";
 
 afterEach(cleanup);
@@ -83,6 +101,14 @@ describe("A2 Agent Editor (smoke)", () => {
 
   it("does not render SkillsTab content when on config tab", () => {
     renderWithIntl(<AgentEditor agent={AGENT} tab="config" onTab={() => {}} />);
+    expect(screen.queryByPlaceholderText("Filter skills…")).not.toBeInTheDocument();
+  });
+
+  it("renders the Context tab label and content when tab=context", () => {
+    renderWithIntl(<AgentEditor agent={AGENT} tab="context" onTab={() => {}} />);
+    expect(screen.getByText("Context")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Filter documents…")).toBeInTheDocument();
+    expect(screen.queryByText("Configuration")).not.toBeInTheDocument();
     expect(screen.queryByPlaceholderText("Filter skills…")).not.toBeInTheDocument();
   });
 });

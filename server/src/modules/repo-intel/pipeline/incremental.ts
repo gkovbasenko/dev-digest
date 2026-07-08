@@ -36,7 +36,7 @@ import type {
 } from '../repository.js';
 import type { IndexResult, IndexStatus } from '../types.js';
 import { runFullIndex, type IndexPayload } from './full.js';
-import { walkClone } from './walk.js';
+import { walkClone } from '../../_shared/clone-walk.js';
 import { computeFileRank } from './rank.js';
 import { renderRepoMap } from './repo-map.js';
 

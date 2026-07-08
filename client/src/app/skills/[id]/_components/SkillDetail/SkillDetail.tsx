@@ -4,6 +4,7 @@ import React from "react";
 import { Tabs } from "@devdigest/ui";
 import type { Skill } from "@devdigest/shared";
 import { SkillPreview } from "../../../_components/SkillsView/SkillPreview";
+import { SkillContextTab } from "../../../_components/SkillsView/SkillContextTab";
 import { PreviewTab } from "./_components/PreviewTab";
 import { StatsTab } from "./_components/StatsTab";
 import { VersionsTab } from "./_components/VersionsTab";
@@ -53,6 +54,11 @@ export function SkillDetail({
       {tab === "config" && (
         <div style={s.tabBody}>
           <SkillPreview skill={skill} onDirtyChange={handleDirtyChange} onDeleted={onDeleted} />
+        </div>
+      )}
+      {tab === "context" && (
+        <div style={s.body}>
+          <SkillContextTab skillId={skill.id} />
         </div>
       )}
       {tab === "preview" && (

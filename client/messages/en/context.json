@@ -1,24 +1,23 @@
 {
   "title": "Project Context",
-  "chunks": "{count} chunks",
-  "reindex": "Re-index",
-  "indexing": "Indexing…",
-  "resync": "Resync",
-  "resyncing": "Resyncing…",
-  "indexStatus": "Index status: {status}",
-  "loadError": "Couldn’t load specs",
-  "kb": "{kb}kb",
+  "description": "Docs this repo exposes under specs/, docs/, and insights/ — attach the ones you want to an agent or skill from its editor. Read-only here.",
+  "loadError": "Could not load Project Context",
+  "tokens": "≈{count} tokens",
+  "indexedFooter": "Indexed — {count} document(s) found.",
+  "notIndexed": {
+    "title": "Not indexed yet",
+    "body": "This repo hasn't been cloned yet, so no docs can be discovered. Once it's cloned, .md files under specs/, docs/, and insights/ will show up here."
+  },
   "empty": {
-    "title": "No spec files yet",
-    "body": "Drop your PRDs, tech specs, and acceptance criteria under .devdigest/specs/. Every agent and the PR brief read them as grounding context."
+    "title": "No project context docs found",
+    "body": "Add .md files under specs/, docs/, or insights/ in this repo, then come back — this page is read-only discovery, nothing is created here."
   },
-  "mode": {
-    "preview": "preview",
-    "edit": "edit"
+  "preview": {
+    "loadError": "Could not load this document"
   },
-  "editor": {
-    "loadError": "Couldn’t load spec",
-    "save": "Save",
-    "saving": "Saving…"
+  "badge": {
+    "specs": "specs",
+    "docs": "docs",
+    "insights": "insights"
   }
 }

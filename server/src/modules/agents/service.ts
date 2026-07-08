@@ -8,6 +8,8 @@ import type {
   Provider,
   ReviewStrategy,
 } from '@devdigest/shared';
+import { ValidationError } from '../../platform/errors.js';
+import { validateContextAttachment } from '../_shared/context-attach.js';
 import { AgentsRepository } from './repository.js';
 import { toAgentDto, toAgentVersionDto } from './helpers.js';
 
@@ -169,6 +171,48 @@ export class AgentsService {
     const resolvedOrder = order ?? existing.length;
     await this.repo.linkSkill(agentId, skillId, resolvedOrder);
     return this.skillLinks(agentId);
+  }
+
+  /**
+   * Attached Project Context doc paths for an agent, in order. Undefined when
+   * the agent isn't in this workspace (route → 404).
+   */
+  async getContextDocs(
+    workspaceId: string,
+    agentId: string,
+  ): Promise<{ path: string; order: number }[] | undefined> {
+    const agent = await this.repo.getById(workspaceId, agentId);
+    if (!agent) return undefined;
+    return this.repo.getAgentContextDocs(agentId);
+  }
+
+  /**
+   * Replace the agent's attached Project Context docs with `paths` (ordered).
+   * When `paths` is non-empty, `repoId` (the repo the docs were discovered
+   * from) is required so each path can be read fresh + cap-checked before
+   * persisting — nothing is persisted if any check fails (`ValidationError` →
+   * 422). Detaching everything (`paths: []`) never needs a repo. Undefined
+   * when the agent isn't in this workspace (route → 404).
+   */
+  async setContextDocs(
+    workspaceId: string,
+    agentId: string,
+    repoId: string | undefined,
+    paths: string[],
+  ): Promise<{ path: string; order: number }[] | undefined> {
+    const agent = await this.repo.getById(workspaceId, agentId);
+    if (!agent) return undefined;
+
+    const uniquePaths = [...new Set(paths)];
+    if (uniquePaths.length > 0) {
+      if (!repoId) throw new ValidationError('repo_id is required to attach documents');
+      const clonePath = await this.repo.getRepoClonePath(workspaceId, repoId);
+      if (!clonePath) throw new ValidationError('Repo not found in this workspace, or not cloned yet');
+      await validateContextAttachment(this.container, clonePath, uniquePaths);
+    }
+
+    await this.repo.setAgentContextDocs(agentId, uniquePaths);
+    return this.repo.getAgentContextDocs(agentId);
   }
 
   /**

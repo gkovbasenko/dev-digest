@@ -49,6 +49,24 @@ vi.mock("../../../../../lib/toast", () => ({
   useToast: () => ({ toast: vi.fn(), success: vi.fn(), error: vi.fn(), info: vi.fn() }),
 }));
 
+// The Context tab renders the real SkillContextTab — stub its data hooks with
+// stable module-scoped refs (SkillContextTab has a useEffect keyed on
+// useSkillContext()'s result; a fresh literal per call OOMs the worker — see
+// client INSIGHTS 2026-07-01).
+const { EMPTY_DOC_LIST, EMPTY_CTX_LINKS } = vi.hoisted(() => ({
+  EMPTY_DOC_LIST: { indexed: true, documents: [] } as { indexed: boolean; documents: never[] },
+  EMPTY_CTX_LINKS: [] as never[],
+}));
+vi.mock("../../../../../lib/hooks/context", () => ({
+  useContextDocs: () => ({ data: EMPTY_DOC_LIST }),
+  useSkillContext: () => ({ data: EMPTY_CTX_LINKS }),
+  useSetSkillContext: () => ({ mutate: vi.fn(), isPending: false }),
+  useContextFilePreview: () => ({ data: undefined, isLoading: false }),
+}));
+vi.mock("../../../../../lib/repo-context", () => ({
+  useActiveRepo: () => ({ repoId: "repo1" }),
+}));
+
 import { SkillDetail } from "./SkillDetail";
 
 afterEach(() => {
@@ -232,5 +250,21 @@ describe("SkillDetail — Stats/Versions error states", () => {
     renderDetail("versions");
     expect(screen.getByText("Couldn't load versions")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Restore" })).not.toBeInTheDocument();
+  });
+});
+
+describe("SkillDetail — Context tab (top-level)", () => {
+  it("renders SkillContextTab when the Context tab is active", () => {
+    renderDetail("context");
+    expect(screen.getByText("Project context to use")).toBeInTheDocument();
+    // Config-tab content is not shown while on Context.
+    expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
+  });
+
+  it("Context is a top-level tab button (peer of Config/Preview/Stats/Versions) that calls onTab", () => {
+    const onTab = vi.fn();
+    renderDetail("config", onTab);
+    fireEvent.click(screen.getByRole("button", { name: "Context" }));
+    expect(onTab).toHaveBeenCalledWith("context");
   });
 });

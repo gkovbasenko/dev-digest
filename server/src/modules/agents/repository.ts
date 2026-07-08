@@ -233,4 +233,37 @@ export class AgentsRepository {
       .insert(t.agentSkills)
       .values(skillIds.map((skillId, i) => ({ agentId, skillId, order: i })));
   }
+
+  // ---- agent_context_docs (Project Context attachments — paths only) ------
+
+  /** Attached Project Context doc paths for an agent, in `order` ascending. */
+  async getAgentContextDocs(agentId: string): Promise<{ path: string; order: number }[]> {
+    return this.db
+      .select({ path: t.agentContextDocs.path, order: t.agentContextDocs.order })
+      .from(t.agentContextDocs)
+      .where(eq(t.agentContextDocs.agentId, agentId))
+      .orderBy(asc(t.agentContextDocs.order));
+  }
+
+  /**
+   * Replace the full attached-doc set for an agent with `paths`, assigning
+   * order = index (delete-all + reinsert, mirroring `setSkills`). Paths only —
+   * text is never persisted; it's read fresh from the clone at run time.
+   */
+  async setAgentContextDocs(agentId: string, paths: string[]): Promise<void> {
+    await this.db.delete(t.agentContextDocs).where(eq(t.agentContextDocs.agentId, agentId));
+    if (paths.length === 0) return;
+    await this.db
+      .insert(t.agentContextDocs)
+      .values(paths.map((path, i) => ({ agentId, path, order: i })));
+  }
+
+  /** Null when the repo doesn't exist in this workspace, or isn't cloned yet. */
+  async getRepoClonePath(workspaceId: string, repoId: string): Promise<string | null> {
+    const [row] = await this.db
+      .select({ clonePath: t.repos.clonePath })
+      .from(t.repos)
+      .where(and(eq(t.repos.workspaceId, workspaceId), eq(t.repos.id, repoId)));
+    return row?.clonePath ?? null;
+  }
 }

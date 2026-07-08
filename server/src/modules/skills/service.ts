@@ -1,5 +1,7 @@
 import type { Container } from '../../platform/container.js';
 import type { Skill, SkillType, SkillSource, SkillVersion, SkillStats } from '@devdigest/shared';
+import { ValidationError } from '../../platform/errors.js';
+import { validateContextAttachment } from '../_shared/context-attach.js';
 import { SkillsRepository } from './repository.js';
 import { fetchSkillUrl } from './fetch-skill.js';
 import { UNTRUSTED_SKILL_START, UNTRUSTED_SKILL_END } from './constants.js';
@@ -133,6 +135,47 @@ export class SkillsService {
     if (body === undefined) return undefined;
     const row = await this.repo.update(workspaceId, id, { body });
     return row ? toSkillDto(row) : undefined;
+  }
+
+  /**
+   * Attached Project Context doc paths for a skill, in order. These are
+   * inherited by any agent that has this skill enabled (AC-9, wired in T6).
+   * Undefined when the skill isn't in this workspace (route → 404).
+   */
+  async getContextDocs(
+    workspaceId: string,
+    skillId: string,
+  ): Promise<{ path: string; order: number }[] | undefined> {
+    const skill = await this.repo.getById(workspaceId, skillId);
+    if (!skill) return undefined;
+    return this.repo.getSkillContextDocs(skillId);
+  }
+
+  /**
+   * Replace the skill's attached Project Context docs with `paths` (ordered).
+   * Same repo/cap validation as the agent side — see
+   * `agents/service.ts#setContextDocs`. Undefined when the skill isn't in
+   * this workspace (route → 404).
+   */
+  async setContextDocs(
+    workspaceId: string,
+    skillId: string,
+    repoId: string | undefined,
+    paths: string[],
+  ): Promise<{ path: string; order: number }[] | undefined> {
+    const skill = await this.repo.getById(workspaceId, skillId);
+    if (!skill) return undefined;
+
+    const uniquePaths = [...new Set(paths)];
+    if (uniquePaths.length > 0) {
+      if (!repoId) throw new ValidationError('repo_id is required to attach documents');
+      const clonePath = await this.repo.getRepoClonePath(workspaceId, repoId);
+      if (!clonePath) throw new ValidationError('Repo not found in this workspace, or not cloned yet');
+      await validateContextAttachment(this.container, clonePath, uniquePaths);
+    }
+
+    await this.repo.setSkillContextDocs(skillId, uniquePaths);
+    return this.repo.getSkillContextDocs(skillId);
   }
 
   async import(workspaceId: string, input: ImportSkillInput): Promise<Skill> {

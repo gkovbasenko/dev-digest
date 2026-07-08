@@ -123,4 +123,8 @@ export const onboarding = pgTable('onboarding', {
     .references(() => repos.id, { onDelete: 'cascade' }),
   json: jsonb('json').notNull(),
   generatedAt: timestamp('generated_at', { withTimezone: true }).defaultNow().notNull(),
+  // Nullable: existing rows predate generation tracking and read as stale (no SHA to
+  // compare against `getIndexState().lastIndexedSha`) with a 0 source file count.
+  generationSha: text('generation_sha'),
+  sourceFileCount: integer('source_file_count'),
 });

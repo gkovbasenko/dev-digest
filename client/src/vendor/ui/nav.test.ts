@@ -27,3 +27,27 @@ describe("NAV — Project Context (T9)", () => {
     expect(rendered).toBe("Go to Project Context");
   });
 });
+
+describe("NAV — Onboarding Tour (T5)", () => {
+  it("registers an 'Onboarding Tour' item under the WORKSPACE group, routed to /repos/:repoId/onboarding", () => {
+    const workspace = NAV.find((g) => g.section === "WORKSPACE");
+    expect(workspace).toBeDefined();
+    const item = workspace!.items.find((it) => it.key === "onboarding-tour");
+    expect(item).toBeDefined();
+    expect(item).toMatchObject({
+      label: "Onboarding Tour",
+      icon: "Compass",
+      href: "/repos/:repoId/onboarding",
+      gKey: "o",
+    });
+  });
+
+  it("shell.json's nav.onboarding-tour message renders 'Go to Onboarding Tour' via the commandPalette.goTo template", () => {
+    expect(shellMessages.nav["onboarding-tour"]).toBe("Onboarding Tour");
+    const rendered = shellMessages.commandPalette.goTo.replace(
+      "{label}",
+      shellMessages.nav["onboarding-tour"]
+    );
+    expect(rendered).toBe("Go to Onboarding Tour");
+  });
+});

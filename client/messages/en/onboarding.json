@@ -1,9 +1,25 @@
 {
   "title": "Onboarding Tour",
+  "heading": "Onboarding for {repo}",
+  "subtitle": "Generated from index of {count} files · last refreshed {relative}",
+  "onThisPage": "On this page",
   "sections": "Sections",
   "sectionCount": "{count} sections",
+  "sectionTitles": {
+    "architecture": "Architecture",
+    "critical_paths": "Critical paths",
+    "how_to_run": "How to run",
+    "guided_reading": "Guided reading",
+    "first_tasks": "First tasks"
+  },
   "regenerate": "Regenerate",
   "regenerating": "Regenerating…",
+  "regenerateFailed": "Regenerate failed.",
+  "retry": "Retry",
+  "stale": "This tour may be out of date — the repo's index has changed since it was generated.",
+  "shareLink": "Share link",
+  "shareLinkCopied": "Link copied to clipboard",
+  "shareLinkFailed": "Couldn’t copy link to clipboard.",
   "unknownError": "Unknown error",
   "generate": {
     "title": "Generate onboarding tour",
@@ -11,7 +27,27 @@
     "cta": "Generate onboarding tour",
     "generating": "Generating…"
   },
+  "notIndexed": {
+    "title": "Index this repo first",
+    "body": "The onboarding tour is generated from this repo's index. Sync or index the repo, then come back here to generate the tour."
+  },
   "loadError": {
     "title": "Couldn’t load the onboarding tour"
+  },
+  "howToRun": {
+    "empty": "Insufficient signal to generate run instructions for this repo.",
+    "copy": "Copy",
+    "copied": "Copied",
+    "copyFailed": "Couldn’t copy to clipboard."
+  },
+  "criticalPaths": {
+    "open": "Open",
+    "empty": "No critical paths identified."
+  },
+  "guidedReading": {
+    "empty": "No guided reading suggested."
+  },
+  "firstTasks": {
+    "empty": "No first tasks suggested."
   }
 }

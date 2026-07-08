@@ -5,6 +5,12 @@ Newest first. See `.claude/skills/engineering-insights/SKILL.md` for what belong
 
 ---
 
+## 2026-07-08 — `@fastify/rate-limit` is OFF in tests; assert a route's rate-limit via its `config`, not a burst-of-N `inject()` that expects 429
+
+`app.ts` registers `@fastify/rate-limit` only `if (config.nodeEnv !== 'test')` (comment: "Disabled under test so integration suites can hammer endpoints via inject()"). Every test boots via `buildApp()` with `NODE_ENV=test`, so the plugin is never active — a burst of 11 `app.inject()` calls can NEVER return 429 regardless of the route's `config.rateLimit`, and no such test exists anywhere in the repo. To cover a per-route rate-limit requirement (e.g. onboarding AC-4's `{ max: 10, timeWindow: '1 minute' }`), assert the **route config** instead: a route's `config` object is plain data Fastify stores at registration time, independent of any plugin. Build a bare `Fastify()` (no DB/testcontainers), add an `onRoute` hook to capture each `RouteOptions`, register the real routes plugin, then assert the captured `config.rateLimit` on the target route (plus a negative control on a sibling route). `OnboardingService`'s constructor only stores `container.db` (never invokes it at registration), so a stub container suffices.
+
+**Evidence:** `server/src/app.ts:95-97` (`if (nodeEnv !== 'test')` guard on rate-limit), `server/test/onboarding-routes.test.ts` (`onRoute`-hook config assertion, hermetic — no container/DB); this session (2026-07-08).
+
 ## 2026-07-08 — The `*.it.test.ts` (testcontainers) suite DOES run in this sandbox with Colima socket env overrides — earlier "can't attach" notes are incomplete
 
 Prior insights (e.g. the 2026-07-01 skills-concurrency entry) say testcontainers can't attach here and fall back to scratch scripts against the compose DB. That's avoidable: `dockerAvailable()` (`test/helpers/pg.ts`) passes (`docker info` works), and the container runtime is Colima — testcontainers just needs to be pointed at Colima's socket. Running the full `.it` suite green requires:

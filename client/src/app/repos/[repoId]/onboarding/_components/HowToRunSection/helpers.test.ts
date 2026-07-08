@@ -36,4 +36,12 @@ describe("parseHowToRunSteps", () => {
       { type: "text", content: "Just read the README." },
     ]);
   });
+
+  it("emits an undefined lang for a fenced code block with no language specifier", () => {
+    const body = ["```", "echo hello", "```"].join("\n");
+
+    expect(parseHowToRunSteps(body)).toEqual([
+      { type: "code", content: "echo hello", lang: undefined },
+    ]);
+  });
 });

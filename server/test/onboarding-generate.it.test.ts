@@ -10,6 +10,7 @@ import { loadConfig } from '../src/platform/config.js';
 import { seed } from '../src/db/seed.js';
 import * as t from '../src/db/schema.js';
 import { MockGitClient, MockGitHubClient, MockLLMProvider } from '../src/adapters/mocks.js';
+import { KEY_FILE_EXCERPT_MAX_CHARS } from '../src/modules/onboarding/constants.js';
 
 const hasDocker = await dockerAvailable();
 const d = hasDocker ? describe : describe.skip;
@@ -299,6 +300,45 @@ d('Onboarding generation (POST /repos/:id/onboarding/regenerate)', () => {
 
     const call = llm.calls.find((c) => c.method === 'completeStructured')!;
     expect(JSON.stringify(call.req)).not.toContain('SECRET_TOKEN_ONBOARDING_98765');
+
+    await app.close();
+  });
+
+  it('truncates a key-file excerpt over KEY_FILE_EXCERPT_MAX_CHARS before it reaches the prompt, but leaves an under-cap file whole', async () => {
+    const { repoId, clonePath } = await makeClonedRepo();
+
+    // README.md is a KEY_FILE_CANDIDATES entry read unconditionally. Overwrite
+    // it (makeClonedRepo already wrote a short one) with content that starts
+    // with a marker well inside the cap and ends with a marker well past it,
+    // so slicing to the cap keeps the first and drops the second.
+    const beforeMarker = 'MARKER_BEFORE_CAP_39281';
+    const afterMarker = 'MARKER_AFTER_CAP_74650';
+    const longContent = beforeMarker + 'x'.repeat(KEY_FILE_EXCERPT_MAX_CHARS) + afterMarker;
+    await writeFile(join(clonePath, 'README.md'), longContent, 'utf8');
+
+    // package.json (also a KEY_FILE_CANDIDATES entry) stays short/under-cap —
+    // asserts the "content at/under the cap is passed whole" branch too.
+    const shortContent = '{"name":"acme","marker":"UNDER_CAP_MARKER_55512"}';
+    await writeFile(join(clonePath, 'package.json'), shortContent, 'utf8');
+
+    const { app, llm } = await makeApp(VALID_RAW_SECTIONS);
+    const res = await app.inject({ method: 'POST', url: `/repos/${repoId}/onboarding/regenerate` });
+    expect(res.statusCode).toBe(200);
+
+    const call = llm.calls.find((c) => c.method === 'completeStructured')!;
+    const req = call.req as { messages: { role: string; content: string }[] };
+    const user = req.messages[1]!.content;
+
+    // Truncated excerpt: pre-cap marker survives, post-cap marker does not.
+    expect(user).toContain(beforeMarker);
+    expect(user).not.toContain(afterMarker);
+
+    const excerptMatch = /## README\.md\n<untrusted source="README\.md">\n([\s\S]*?)\n<\/untrusted>/.exec(user);
+    expect(excerptMatch).not.toBeNull();
+    expect(excerptMatch![1]!.length).toBeLessThanOrEqual(KEY_FILE_EXCERPT_MAX_CHARS);
+
+    // Whole excerpt: an under-cap file is sent verbatim, not truncated.
+    expect(user).toContain(shortContent);
 
     await app.close();
   });

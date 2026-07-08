@@ -1,6 +1,8 @@
 import type { Container } from '../../platform/container.js';
 import {
   PrHistory,
+  RiskBrief as RiskBriefSchema,
+  type BriefRead,
   type FindingActionKind,
   type PrBlastResponse,
   type PrIntentRecord,
@@ -8,7 +10,7 @@ import {
   type RunTrace,
   type SmartDiffResponse,
 } from '@devdigest/shared';
-import { AppError, NotFoundError } from '../../platform/errors.js';
+import { AppError, NotFoundError, ValidationError } from '../../platform/errors.js';
 import type { AgentRow } from '../../db/rows.js';
 import { ReviewRepository } from './repository.js';
 import { type ReviewDto, type ReviewDtoFinding } from './helpers.js';
@@ -16,6 +18,8 @@ import { ReviewRunExecutor, type Logger } from './run-executor.js';
 import { actOnFinding as actOnFindingImpl } from './findings.js';
 import { findingRowToDto, reviewToDto } from './helpers.js';
 import { computeIntent, type IntentLogger } from './intent/compute.js';
+import { computeBrief } from './brief/compute.js';
+import { groundBrief } from './brief/ground.js';
 import { composeSmartDiff } from './smart-diff/compose.js';
 import { toPrBlastResponse } from './blast/map.js';
 import { groupPriorPrRows } from './prior-prs/map.js';
@@ -227,6 +231,99 @@ export class ReviewService {
     });
     await this.repo.upsertIntent(prId, intent);
     return { ...intent, pr_id: prId };
+  }
+
+  // ===========================================================================
+  // Brief (Why+Risk; single-call synthesis over already-built artifacts)
+  // ===========================================================================
+
+  /** Cached DB read — zero LLM calls (AC-17). No row yet ⇒ `exists:false` (AC-9). */
+  async getBrief(workspaceId: string, prId: string): Promise<BriefRead> {
+    const pull = await this.repo.getPull(workspaceId, prId);
+    if (!pull) throw new NotFoundError('Pull request not found');
+
+    const row = await this.repo.getBrief(prId);
+    if (!row) return { exists: false, stale: false, generated_at: null, brief: null };
+
+    // Defense-in-depth: row.json is jsonb (unknown at the type level). We are
+    // the only writer, but re-validate against the contract rather than
+    // trusting it blindly — a corrupt row degrades to a null brief, not a 500.
+    const parsed = RiskBriefSchema.safeParse(row.json);
+    const stale = row.generationHeadSha !== pull.headSha; // null ⇒ stale (AC-10)
+
+    return {
+      exists: true,
+      stale,
+      generated_at: row.generatedAt ? row.generatedAt.toISOString() : null,
+      brief: parsed.success ? parsed.data : null,
+    };
+  }
+
+  /**
+   * Paid generation — exactly one `completeStructured` call (AC-1). Gated
+   * BEFORE any LLM call/write when the PR has no changed files (AC-2). A
+   * validation/LLM failure throws before the upsert, leaving any prior row
+   * untouched (AC-3, AC-18).
+   */
+  async generateBrief(workspaceId: string, prId: string): Promise<BriefRead> {
+    const startedAt = Date.now();
+    const pull = await this.repo.getPull(workspaceId, prId);
+    if (!pull) throw new NotFoundError('Pull request not found');
+    const repo = await this.repo.getRepo(pull.repoId);
+    if (!repo) throw new NotFoundError('Repo not found');
+    const files = await this.repo.getPrFiles(prId);
+
+    if (files.length === 0) {
+      throw new ValidationError('PR has no changed files — nothing to brief');
+    }
+
+    const [intentRecord, blast, smartDiff] = await Promise.all([
+      this.getIntent(workspaceId, prId),
+      this.getBlast(workspaceId, prId),
+      this.getSmartDiff(workspaceId, prId),
+    ]);
+
+    const { brief, provider, model, inputPresence } = await computeBrief({
+      container: this.container,
+      workspaceId,
+      repoId: pull.repoId,
+      pull,
+      repo,
+      files,
+      intent: intentRecord,
+      blast,
+      smartDiff,
+    });
+
+    // Ground every model-emitted file reference against the real changed
+    // files + repo-intel index before persist (AC-7).
+    const emittedPaths = [
+      ...new Set([...brief.risks.flatMap((r) => r.file_refs), ...brief.review_focus.map((f) => f.file)]),
+    ];
+    const rankRows =
+      emittedPaths.length > 0 ? await this.container.repoIntel.getFileRank(pull.repoId, emittedPaths) : [];
+    const validPaths = new Set<string>([...files.map((f) => f.path), ...rankRows.map((r) => r.path)]);
+    const { brief: grounded, droppedCount } = groundBrief(brief, validPaths);
+
+    const generatedAt = new Date();
+    await this.repo.upsertBrief(prId, { json: grounded, generatedAt, generationHeadSha: pull.headSha });
+
+    // Structured JSON, one line per generation — no secrets, PR-scoped.
+    // eslint-disable-next-line no-console
+    console.log(
+      JSON.stringify({
+        event: 'brief.generate',
+        prId,
+        provider,
+        model,
+        inputPresence,
+        fileCount: files.length,
+        droppedCount,
+        durationMs: Date.now() - startedAt,
+      }),
+    );
+
+    return { exists: true, stale: false, generated_at: generatedAt.toISOString(), brief: grounded };
   }
 
   // ===========================================================================

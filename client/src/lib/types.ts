@@ -31,6 +31,7 @@ export type {
 
 export type { Review, Finding, Severity, Verdict } from "@devdigest/shared";
 export type { PrBrief, SmartDiff, SmartDiffResponse, PrIntentRecord } from "@devdigest/shared";
+export type { RiskBrief, BriefRead } from "@devdigest/shared";
 export type {
   PrBlastResponse,
   ChangedSymbol,

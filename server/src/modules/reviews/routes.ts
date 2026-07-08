@@ -19,6 +19,8 @@ import { ReviewService } from './service.js';
  *   GET    /pulls/:id/smart-diff                       → deterministic Smart Diff (no LLM, no persistence)
  *   GET    /pulls/:id/blast                            → blast radius over the repo-intel index (no LLM, no persistence)
  *   GET    /pulls/:id/prior-prs                        → other merged PRs touching the same files (no LLM, no persistence)
+ *   GET    /pulls/:id/brief                            → cached Why+Risk brief, always 200 (AC-9)
+ *   POST   /pulls/:id/brief                            → (re)generate + persist the Why+Risk brief; returns it
  */
 const FINDING_ACTIONS = ['accept', 'dismiss'] as const;
 export default async function reviewsRoutes(appBase: FastifyInstance) {
@@ -186,4 +188,20 @@ export default async function reviewsRoutes(appBase: FastifyInstance) {
     const { workspaceId } = await getContext(container, req);
     return service.getPriorPrs(workspaceId, req.params.id);
   });
+
+  // ---- Brief (Why+Risk; deterministic-input single-call synthesis) --------
+  app.get('/pulls/:id/brief', { schema: { params: IdParams } }, async (req) => {
+    const { workspaceId } = await getContext(container, req);
+    return service.getBrief(workspaceId, req.params.id);
+  });
+
+  // Rate-limited like the review trigger and intent recompute: an LLM call per request.
+  app.post(
+    '/pulls/:id/brief',
+    { schema: { params: IdParams }, config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
+    async (req) => {
+      const { workspaceId } = await getContext(container, req);
+      return service.generateBrief(workspaceId, req.params.id);
+    },
+  );
 }

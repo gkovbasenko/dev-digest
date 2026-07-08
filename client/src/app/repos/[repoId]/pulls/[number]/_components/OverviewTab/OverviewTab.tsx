@@ -4,6 +4,7 @@ import React from "react";
 import { SectionLabel } from "@devdigest/ui";
 import { IntentCard } from "../IntentCard";
 import { BlastPanel } from "../BlastPanel";
+import { PrBriefCard } from "../PrBriefCard";
 import { s } from "./styles";
 
 interface OverviewTabProps {
@@ -17,6 +18,10 @@ interface OverviewTabProps {
 export function OverviewTab({ prId, prBody, repoId, repoFullName, headSha }: OverviewTabProps) {
   return (
     <>
+      {/* Why+Risk Brief — full-width, leads the Overview tab above the
+          Intent/Blast columns. */}
+      <PrBriefCard prId={prId} repoFullName={repoFullName} headSha={headSha} />
+
       {/* Intent (left) + Blast Radius (right) sit side-by-side per the design;
           the Blast panel is part of the Overview, not a standalone tab. */}
       <div style={s.columns}>

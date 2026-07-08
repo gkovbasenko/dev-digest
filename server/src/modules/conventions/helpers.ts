@@ -1,8 +1,12 @@
-import { resolve, sep } from 'node:path';
 import { wrapUntrusted } from '@devdigest/reviewer-core';
 import { ConventionCategory, type ChatMessage, type ConventionCandidate } from '@devdigest/shared';
 import type { ConventionRow } from '../../db/rows.js';
 import { EVIDENCE_WINDOW } from './constants.js';
+
+// Promoted to `_shared/clone-read.ts` (server INSIGHTS 2026-07-02) — re-exported
+// here so existing imports of `resolveClonePath`/`isWithinRoot` from this module
+// keep working unchanged.
+export { resolveClonePath, isWithinRoot } from '../_shared/clone-read.js';
 
 export function toConventionDto(row: ConventionRow): ConventionCandidate {
   // Both write paths (extraction's LLM-output schema, the PATCH route body)
@@ -22,36 +26,6 @@ export function toConventionDto(row: ConventionRow): ConventionCandidate {
     accepted: !!row.acceptedAt,
     rejected: !!row.rejectedAt,
   };
-}
-
-/**
- * Is `candidate` equal to `root`, or nested inside it? Both should already be
- * resolved/absolute (via `resolve()`/`realpath()`, which never leave a
- * trailing separator except for the filesystem root itself) — a trailing
- * separator on `root` is stripped defensively anyway, since `candidate`
- * matching `root + sep` would otherwise double up (`/a/b/` + sep = `/a/b//`,
- * which no real resolved path starts with) and wrongly reject everything.
- */
-export function isWithinRoot(root: string, candidate: string): boolean {
-  const normalizedRoot = root.length > sep.length && root.endsWith(sep) ? root.slice(0, -sep.length) : root;
-  return candidate === normalizedRoot || candidate.startsWith(normalizedRoot + sep);
-}
-
-/**
- * Resolve `file` against `clonePath` and return the resolved absolute path,
- * or null if it would escape the clone directory (path traversal via `../`,
- * or an absolute path that overrides the base entirely). This is a purely
- * syntactic check — it does NOT follow symlinks, so it does not by itself
- * defend against a symlink committed inside the clone that points outside
- * it (a git repo can commit one; checkout materializes it as a real
- * symlink). Callers that actually read the file must additionally realpath
- * the result and re-check containment — see `resolveRealClonePath` in
- * `service.ts`, the actual read boundary.
- */
-export function resolveClonePath(clonePath: string, file: string): string | null {
-  const root = resolve(clonePath);
-  const resolved = resolve(root, file);
-  return isWithinRoot(root, resolved) ? resolved : null;
 }
 
 export interface EvidenceCheck {

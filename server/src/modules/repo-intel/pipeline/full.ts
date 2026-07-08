@@ -42,7 +42,7 @@ import type {
   RepoIntelRepository,
 } from '../repository.js';
 import type { IndexResult, IndexStatus } from '../types.js';
-import { walkClone } from './walk.js';
+import { walkClone } from '../../_shared/clone-walk.js';
 import { computeFileRank } from './rank.js';
 import { renderRepoMap } from './repo-map.js';
 

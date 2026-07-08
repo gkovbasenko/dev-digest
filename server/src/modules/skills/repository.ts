@@ -226,4 +226,37 @@ export class SkillsRepository {
       .values({ skillId, version, body })
       .onConflictDoNothing();
   }
+
+  // ---- skill_context_docs (Project Context attachments — paths only) ------
+
+  /** Attached Project Context doc paths for a skill, in `order` ascending. */
+  async getSkillContextDocs(skillId: string): Promise<{ path: string; order: number }[]> {
+    return this.db
+      .select({ path: t.skillContextDocs.path, order: t.skillContextDocs.order })
+      .from(t.skillContextDocs)
+      .where(eq(t.skillContextDocs.skillId, skillId))
+      .orderBy(asc(t.skillContextDocs.order));
+  }
+
+  /**
+   * Replace the full attached-doc set for a skill with `paths`, assigning
+   * order = index (delete-all + reinsert, mirroring the agent side). Paths
+   * only — text is never persisted; it's read fresh from the clone at run time.
+   */
+  async setSkillContextDocs(skillId: string, paths: string[]): Promise<void> {
+    await this.db.delete(t.skillContextDocs).where(eq(t.skillContextDocs.skillId, skillId));
+    if (paths.length === 0) return;
+    await this.db
+      .insert(t.skillContextDocs)
+      .values(paths.map((path, i) => ({ skillId, path, order: i })));
+  }
+
+  /** Null when the repo doesn't exist in this workspace, or isn't cloned yet. */
+  async getRepoClonePath(workspaceId: string, repoId: string): Promise<string | null> {
+    const [row] = await this.db
+      .select({ clonePath: t.repos.clonePath })
+      .from(t.repos)
+      .where(and(eq(t.repos.workspaceId, workspaceId), eq(t.repos.id, repoId)));
+    return row?.clonePath ?? null;
+  }
 }

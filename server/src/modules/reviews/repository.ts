@@ -23,6 +23,7 @@ import * as reviewRepo from './repository/review.repo.js';
 import * as runRepo from './repository/run.repo.js';
 import * as pullRepo from './repository/pull.repo.js';
 import * as skillsRepo from './repository/skills.repo.js';
+import * as contextRepo from './repository/context.repo.js';
 
 export class ReviewRepository {
   constructor(private db: Db) {}
@@ -208,5 +209,19 @@ export class ReviewRepository {
   /** Record which skills (+ version consumed) fed a given review run. */
   recordRunSkills(runId: string, skills: { id: string; version: number }[]): Promise<void> {
     return skillsRepo.recordRunSkills(this.db, runId, skills);
+  }
+
+  // ---- Project Context attachments (agent + skill) → review prompt --------
+
+  /** Attached Project Context doc paths for an agent, in `order` ascending. */
+  getAgentContextDocs(agentId: string): Promise<{ path: string; order: number }[]> {
+    return contextRepo.getAgentContextDocs(this.db, agentId);
+  }
+
+  /** Attached Project Context doc paths for a set of skills (batched by skill id). */
+  getSkillContextDocs(
+    skillIds: string[],
+  ): Promise<{ skillId: string; path: string; order: number }[]> {
+    return contextRepo.getSkillContextDocs(this.db, skillIds);
   }
 }

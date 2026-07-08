@@ -1,7 +1,14 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { Skill, SkillType, CommunitySkill, SkillVersion, SkillStats } from '@devdigest/shared';
+import {
+  Skill,
+  SkillType,
+  CommunitySkill,
+  SkillVersion,
+  SkillStats,
+  SetContextInput,
+} from '@devdigest/shared';
 import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
 import { NotFoundError } from '../../platform/errors.js';
@@ -19,6 +26,8 @@ import { SkillsService } from './service.js';
  *   GET    /skills/:id/versions   → version history (DESC)
  *   GET    /skills/:id/stats      → usage stats (agents, versions, run usage)
  *   POST   /skills/:id/restore    → restore an old version's body as a new version
+ *   GET    /skills/:id/context    → attached Project Context doc paths (ordered)
+ *   POST   /skills/:id/context    → set/reorder attached doc paths (?repo_id=… + caps)
  *
  * IMPORTANT: /skills/import and /skills/community are registered BEFORE /skills/:id
  * so Fastify does not attempt to match "import"/"community" as UUID params.
@@ -43,6 +52,13 @@ const UpdateSkillBody = z.object({
 const RestoreSkillBody = z.object({
   version: z.number().int(),
 });
+
+/**
+ * `repo_id` names the repo the submitted paths were discovered from — needed
+ * to read + cap-check each doc before persisting. Required only when `paths`
+ * is non-empty (detaching everything needs no repo).
+ */
+const SetContextQuery = z.object({ repo_id: z.string().uuid().optional() });
 
 const ImportSkillBody = z
   .object({
@@ -147,6 +163,29 @@ export default async function skillsRoutes(appBase: FastifyInstance) {
       const skill = await service.restore(workspaceId, req.params.id, req.body.version);
       if (!skill) throw new NotFoundError('Skill not found');
       return skill;
+    },
+  );
+
+  app.get('/skills/:id/context', { schema: { params: IdParams } }, async (req) => {
+    const { workspaceId } = await getContext(app.container, req);
+    const links = await service.getContextDocs(workspaceId, req.params.id);
+    if (!links) throw new NotFoundError('Skill not found');
+    return links;
+  });
+
+  app.post(
+    '/skills/:id/context',
+    { schema: { params: IdParams, querystring: SetContextQuery, body: SetContextInput } },
+    async (req) => {
+      const { workspaceId } = await getContext(app.container, req);
+      const links = await service.setContextDocs(
+        workspaceId,
+        req.params.id,
+        req.query.repo_id,
+        req.body.paths,
+      );
+      if (!links) throw new NotFoundError('Skill not found');
+      return links;
     },
   );
 }

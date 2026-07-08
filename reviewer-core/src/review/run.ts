@@ -56,8 +56,12 @@ export interface ReviewInput {
   skills?: string[];
   /** Curated memory items. */
   memory?: string[];
-  /** Project-context spec chunks (untrusted; delimiter-wrapped downstream). */
-  specs?: string[];
+  /**
+   * Project-context spec chunks (untrusted; delimiter-wrapped downstream).
+   * `source` is the doc's clone-relative path, carried into the wrapper as
+   * provenance (AC-10).
+   */
+  specs?: { source: string; text: string }[];
   /**
    * Optional callers-of-changed-symbols digest (T1.3). Untrusted; rendered
    * before the diff section. Empty/undefined → section omitted.

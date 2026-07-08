@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
-import { CiFailOn, Provider, ReviewStrategy } from '@devdigest/shared';
+import { CiFailOn, Provider, ReviewStrategy, SetContextInput } from '@devdigest/shared';
 import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
 import { NotFoundError } from '../../platform/errors.js';
@@ -26,6 +26,8 @@ const VersionParams = z.object({
  *   GET    /agents/:id/versions/:version → one config snapshot
  *   GET    /agents/:id/skills       → linked skills (ordered)
  *   POST   /agents/:id/skills       → set/reorder linked skills OR link one
+ *   GET    /agents/:id/context      → attached Project Context doc paths (ordered)
+ *   POST   /agents/:id/context      → set/reorder attached doc paths (?repo_id=… + caps)
  *   GET    /agents/:id/models       → dynamic model list for the agent's provider
  *   GET    /providers/:id/models    → dynamic model list for a provider (editor)
  */
@@ -66,6 +68,14 @@ const SetSkillsBody = z
   .refine((b) => b.skill_ids !== undefined || b.skill_id !== undefined, {
     message: 'Provide skill_ids (set/reorder) or skill_id (link one)',
   });
+
+/**
+ * `repo_id` names the repo the submitted paths were discovered from — needed
+ * to read + cap-check each doc before persisting (agents aren't repo-scoped,
+ * so there's no other way to know which clone to validate against). Required
+ * only when `paths` is non-empty (detaching everything needs no repo).
+ */
+const SetContextQuery = z.object({ repo_id: z.string().uuid().optional() });
 
 export default async function agentsRoutes(appBase: FastifyInstance) {
   const app = appBase.withTypeProvider<ZodTypeProvider>();
@@ -159,6 +169,29 @@ export default async function agentsRoutes(appBase: FastifyInstance) {
         body.skill_ids !== undefined
           ? await service.setSkills(workspaceId, req.params.id, body.skill_ids)
           : await service.linkSkill(workspaceId, req.params.id, body.skill_id!, body.order);
+      if (!links) throw new NotFoundError('Agent not found');
+      return links;
+    },
+  );
+
+  app.get('/agents/:id/context', { schema: { params: IdParams } }, async (req) => {
+    const { workspaceId } = await getContext(app.container, req);
+    const links = await service.getContextDocs(workspaceId, req.params.id);
+    if (!links) throw new NotFoundError('Agent not found');
+    return links;
+  });
+
+  app.post(
+    '/agents/:id/context',
+    { schema: { params: IdParams, querystring: SetContextQuery, body: SetContextInput } },
+    async (req) => {
+      const { workspaceId } = await getContext(app.container, req);
+      const links = await service.setContextDocs(
+        workspaceId,
+        req.params.id,
+        req.query.repo_id,
+        req.body.paths,
+      );
       if (!links) throw new NotFoundError('Agent not found');
       return links;
     },

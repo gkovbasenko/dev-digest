@@ -46,6 +46,16 @@ export const Onboarding = z.object({
 });
 export type Onboarding = z.infer<typeof Onboarding>;
 
+export const OnboardingDoc = z.object({
+  exists: z.boolean(),
+  indexed: z.boolean(),
+  stale: z.boolean(),
+  sections: z.array(OnboardingSection),
+  generated_at: z.string().nullable(),
+  source_file_count: z.number().int(),
+});
+export type OnboardingDoc = z.infer<typeof OnboardingDoc>;
+
 // ---- Eval ----
 export const EvalPerTrace = z.object({
   name: z.string(),

@@ -1,14 +1,11 @@
 "use client";
 
 import React from "react";
-import { Icon, Badge, Markdown, Toggle, Button, TextInput, SelectInput, Textarea, Tabs } from "@devdigest/ui";
+import { Icon, Badge, Markdown, Toggle, Button, TextInput, SelectInput, Textarea } from "@devdigest/ui";
 import type { Skill, SkillType } from "@devdigest/shared";
 import { useUpdateSkill, useDeleteSkill } from "../../../../lib/hooks/skills";
 import { useToast } from "../../../../lib/toast";
-import { SkillContextTab } from "./SkillContextTab";
 import { s } from "./styles";
-
-type PreviewTab = "details" | "context";
 
 const TYPE_COLORS: Record<SkillType, { color: string; bg: string }> = {
   rubric: { color: "#a78bfa", bg: "rgba(167,139,250,0.12)" },
@@ -42,7 +39,6 @@ export function SkillPreview({
   const update = useUpdateSkill();
   const del = useDeleteSkill();
   const toast = useToast();
-  const [tab, setTab] = React.useState<PreviewTab>("details");
   const [editing, setEditing] = React.useState(false);
   const [name, setName] = React.useState(skill.name);
   const [type, setType] = React.useState<SkillType>(skill.type);
@@ -60,7 +56,6 @@ export function SkillPreview({
     setDescription(skill.description);
     setEnabled(skill.enabled);
     setEditing(false);
-    setTab("details");
   }, [skill.id]);
 
   const isDirty =
@@ -165,83 +160,67 @@ export function SkillPreview({
         </div>
       )}
 
-      <Tabs
-        tabs={[
-          { key: "details", label: "Details" },
-          { key: "context", label: "Context" },
-        ]}
-        value={tab}
-        onChange={(k) => setTab(k as PreviewTab)}
-        pad="0"
-      />
-
-      {tab === "details" && (
-        <>
-          <div>
-            <div style={s.bodyLabel}>Description</div>
-            {editing ? (
-              <Textarea
-                value={description}
-                onChange={setDescription}
-                rows={3}
-                placeholder="What does this skill check?"
-              />
-            ) : (
-              <div
-                style={{
-                  fontSize: 14,
-                  color: skill.description ? "var(--text-secondary)" : "var(--text-muted)",
-                  lineHeight: 1.5,
-                }}
-              >
-                {skill.description || "No description"}
-              </div>
-            )}
+      <div>
+        <div style={s.bodyLabel}>Description</div>
+        {editing ? (
+          <Textarea
+            value={description}
+            onChange={setDescription}
+            rows={3}
+            placeholder="What does this skill check?"
+          />
+        ) : (
+          <div
+            style={{
+              fontSize: 14,
+              color: skill.description ? "var(--text-secondary)" : "var(--text-muted)",
+              lineHeight: 1.5,
+            }}
+          >
+            {skill.description || "No description"}
           </div>
+        )}
+      </div>
 
-          <div>
-            <div style={s.bodyLabel}>Skill body (Markdown)</div>
-            {editing ? (
-              <Textarea value={body} onChange={setBody} rows={16} mono />
-            ) : (
-              <div style={{ fontSize: 14, color: "var(--text-secondary)", lineHeight: 1.6 }}>
-                <Markdown>{skill.body}</Markdown>
-              </div>
-            )}
+      <div>
+        <div style={s.bodyLabel}>Skill body (Markdown)</div>
+        {editing ? (
+          <Textarea value={body} onChange={setBody} rows={16} mono />
+        ) : (
+          <div style={{ fontSize: 14, color: "var(--text-secondary)", lineHeight: 1.6 }}>
+            <Markdown>{skill.body}</Markdown>
           </div>
+        )}
+      </div>
 
-          <div style={s.previewActions}>
-            {editing ? (
-              <>
-                <Button kind="primary" onClick={saveEdits} disabled={!name.trim() || update.isPending}>
-                  {update.isPending ? "Saving…" : "Save"}
-                </Button>
-                <Button
-                  kind="ghost"
-                  onClick={() => {
-                    setEditing(false);
-                    setName(skill.name);
-                    setType(skill.type);
-                    setBody(skill.body);
-                    setDescription(skill.description);
-                  }}
-                >
-                  Cancel
-                </Button>
-                <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                  Saving a changed body creates a new immutable version.
-                </span>
-              </>
-            ) : (
-              <Button kind="secondary" icon="Edit" onClick={() => setEditing(true)}>
-                Edit
-              </Button>
-            )}
-          </div>
-        </>
-      )}
-
-      {tab === "context" && <SkillContextTab skillId={skill.id} />}
+      <div style={s.previewActions}>
+        {editing ? (
+          <>
+            <Button kind="primary" onClick={saveEdits} disabled={!name.trim() || update.isPending}>
+              {update.isPending ? "Saving…" : "Save"}
+            </Button>
+            <Button
+              kind="ghost"
+              onClick={() => {
+                setEditing(false);
+                setName(skill.name);
+                setType(skill.type);
+                setBody(skill.body);
+                setDescription(skill.description);
+              }}
+            >
+              Cancel
+            </Button>
+            <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
+              Saving a changed body creates a new immutable version.
+            </span>
+          </>
+        ) : (
+          <Button kind="secondary" icon="Edit" onClick={() => setEditing(true)}>
+            Edit
+          </Button>
+        )}
+      </div>
     </div>
   );
 }

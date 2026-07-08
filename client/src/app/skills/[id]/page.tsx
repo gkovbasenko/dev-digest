@@ -17,7 +17,7 @@ import { ApiError } from "../../../lib/api";
 
 type DrawerMode = "file" | "url" | "community" | null;
 
-const VALID_TABS = ["config", "preview", "stats", "versions"];
+const VALID_TABS = ["config", "context", "preview", "stats", "versions"];
 
 export default function SkillDetailPage() {
   const params = useParams<{ id: string }>();

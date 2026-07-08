@@ -467,19 +467,3 @@ describe("SkillPreview — delete", () => {
     expect(screen.getByRole("button", { name: "Delete skill" })).toBeDisabled();
   });
 });
-
-describe("SkillPreview — Context tab (T11)", () => {
-  it("defaults to the Details tab (unchanged behavior)", () => {
-    render(<SkillPreview skill={BASE_SKILL} />);
-    expect(screen.getByText("Skill body (Markdown)")).toBeInTheDocument();
-    expect(screen.queryByText("Project context to use")).not.toBeInTheDocument();
-  });
-
-  it("switching to the Context tab shows SkillContextTab's content and hides the Details body", () => {
-    render(<SkillPreview skill={BASE_SKILL} />);
-    fireEvent.click(screen.getByRole("button", { name: "Context" }));
-
-    expect(screen.getByText("Project context to use")).toBeInTheDocument();
-    expect(screen.queryByText("Skill body (Markdown)")).not.toBeInTheDocument();
-  });
-});

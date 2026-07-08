@@ -37,6 +37,8 @@ export type ContextDocPreview = z.infer<typeof ContextDocPreview>;
 
 // ---- Attachment (agent/skill context: paths only, ordered) ----
 export const SetContextInput = z.object({
-  paths: z.array(z.string()),
+  // .min(1): reject empty-string paths at the schema boundary (defense-in-depth;
+  // server-side isAllowedContextPath + realpath containment remains the real guard).
+  paths: z.array(z.string().min(1)),
 });
 export type SetContextInput = z.infer<typeof SetContextInput>;

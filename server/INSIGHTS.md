@@ -5,6 +5,24 @@ Newest first. See `.claude/skills/engineering-insights/SKILL.md` for what belong
 
 ---
 
+## 2026-07-08 — The `*.it.test.ts` (testcontainers) suite DOES run in this sandbox with Colima socket env overrides — earlier "can't attach" notes are incomplete
+
+Prior insights (e.g. the 2026-07-01 skills-concurrency entry) say testcontainers can't attach here and fall back to scratch scripts against the compose DB. That's avoidable: `dockerAvailable()` (`test/helpers/pg.ts`) passes (`docker info` works), and the container runtime is Colima — testcontainers just needs to be pointed at Colima's socket. Running the full `.it` suite green requires:
+
+```
+DOCKER_HOST="unix://$HOME/.colima/default/docker.sock" \
+TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock \
+TESTCONTAINERS_HOST_OVERRIDE=127.0.0.1 \
+TESTCONTAINERS_RYUK_DISABLED=true \
+pnpm test
+```
+
+Without these, `startPg()` fails with `Could not find a working container runtime strategy` and every `.it.test.ts` file errors at `beforeAll` (looks like 19 "failed files" but they're setup failures, not assertion failures). With them, the whole suite runs against throwaway `pgvector/pgvector:pg16` containers — no need to pollute the shared compose `devdigest` DB. Verified this session: full server suite went from 292 passed / 85 skipped to **377 passed / 1 failed** (the lone failure is the pre-existing unrelated `contracts.test.ts > SmartDiff` fixture).
+
+**How to apply:** to actually execute `.it` coverage locally (not just hermetic tests), export the four env vars above. `RYUK_DISABLED=true` sidesteps the reaper container that otherwise trips on the Colima socket. This is the real verification path for DB-backed ACs — prefer it over scratch scripts.
+
+**Evidence:** `server/test/helpers/pg.ts` (`startPg`/`dockerAvailable`), this session (2026-07-08) — the Project Context `.it` suite (`context.it.test.ts`, `agents-context.it.test.ts`, `skills-context.it.test.ts`, `reviews-context.it.test.ts`, `context-ac22.it.test.ts`) all pass under these envs; socket at `unix:///Users/gkovbasenko/.colima/default/docker.sock`.
+
 ## 2026-07-08 — `js-tiktoken`'s BPE encode is quadratic-ish on short-period repetitive text — a few KB can hang for 10s+; guard with a cheap pre-check, not a length cutoff
 
 `container.tokenizer.count()` (js-tiktoken `cl100k_base`) is fast on ordinary text regardless of size (400k chars of repeated-sentence prose encoded in ~35ms), but its merge search degrades catastrophically on short-period repetitive input: `"ab".repeat(10000)` (20,000 chars) took 18+ seconds; `"x".repeat(10000)` took 5.8s; `"x".repeat(220000)` did not finish in 20s. This is a **content-shape** problem, not a size problem — a raw `text.length` cutoff either misses the pathological case entirely (it's already too slow well under any size threshold you'd pick) or discards exact counts for every large-but-normal document. Discovered while writing T5's cap-enforcement integration test: a test doc of `'x'.repeat(220000)` (meant to simulate "a doc over the 50k-token cap") hung the whole `tsx` process.

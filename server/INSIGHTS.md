@@ -5,6 +5,12 @@ Newest first. See `.claude/skills/engineering-insights/SKILL.md` for what belong
 
 ---
 
+## 2026-07-08 — `ContextService` is not on the DI container — construct it (`new ContextService(container)`) to read Project-Context specs
+
+Reading Project-Context specs/docs from another module uses `new ContextService(container)` (the `context/routes.ts` precedent), NOT a container getter — `ContextService` is a public class, its `ContextRepository` stays encapsulated, and `discover()`/`preview()` are already realpath-contained clone reads (so callers must NOT read the clone directly). Brief compute (`reviews/brief/compute.ts` `gatherSpecs`) is the 2nd such call site; wrap the whole read in try/catch → `[]` (best-effort, un-cloned repos throw). A 3rd consumer is the trigger to promote it to a lazy `container.context` getter (mirroring `repoIntel`), not a 3rd ad-hoc construction.
+
+**Evidence:** `server/src/modules/reviews/brief/compute.ts` (`gatherSpecs` → `new ContextService(container)`), `server/src/modules/context/routes.ts` (`new ContextService(app.container)`); architecture review of PR #20 confirmed this reaches only the public service, not the repo/DB layer.
+
 ## 2026-07-08 — `@fastify/rate-limit` is OFF in tests; assert a route's rate-limit via its `config`, not a burst-of-N `inject()` that expects 429
 
 `app.ts` registers `@fastify/rate-limit` only `if (config.nodeEnv !== 'test')` (comment: "Disabled under test so integration suites can hammer endpoints via inject()"). Every test boots via `buildApp()` with `NODE_ENV=test`, so the plugin is never active — a burst of 11 `app.inject()` calls can NEVER return 429 regardless of the route's `config.rateLimit`, and no such test exists anywhere in the repo. To cover a per-route rate-limit requirement (e.g. onboarding AC-4's `{ max: 10, timeWindow: '1 minute' }`), assert the **route config** instead: a route's `config` object is plain data Fastify stores at registration time, independent of any plugin. Build a bare `Fastify()` (no DB/testcontainers), add an `onRoute` hook to capture each `RouteOptions`, register the real routes plugin, then assert the captured `config.rateLimit` on the target route (plus a negative control on a sibling route). `OnboardingService`'s constructor only stores `container.db` (never invokes it at registration), so a stub container suffices.

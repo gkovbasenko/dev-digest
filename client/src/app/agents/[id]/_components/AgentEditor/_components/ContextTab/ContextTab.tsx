@@ -3,7 +3,13 @@
 import React from "react";
 import { Badge, Checkbox, Icon, Markdown } from "@devdigest/ui";
 import type { ContextDocument } from "@devdigest/shared";
-import { PER_DOC_TOKEN_CAP, AGGREGATE_TOKEN_CAP } from "@devdigest/shared";
+// Runtime (value) import — pull the caps from the specific contract module, NOT
+// the `@devdigest/shared` barrel. The barrel re-exports every contract via
+// `./contracts/*.js` specifiers; a value import of it forces webpack to bundle
+// that whole `.js`-re-export chain (bloats the client bundle and trips the
+// `.js`→`.ts` resolution the barrel has never needed for type-only imports).
+// See client INSIGHTS 2026-07-08.
+import { PER_DOC_TOKEN_CAP, AGGREGATE_TOKEN_CAP } from "@devdigest/shared/contracts/context";
 import {
   useContextDocs,
   useContextFilePreview,

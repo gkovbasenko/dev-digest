@@ -3,7 +3,10 @@
 import React from "react";
 import { Badge, Checkbox, Icon, Markdown } from "@devdigest/ui";
 import type { ContextBadge, ContextDocument } from "@devdigest/shared";
-import { PER_DOC_TOKEN_CAP, AGGREGATE_TOKEN_CAP } from "@devdigest/shared";
+// Runtime (value) import — from the specific contract module, not the barrel
+// (a value import of `@devdigest/shared` bundles every contract + trips webpack
+// `.js`→`.ts` resolution). See client INSIGHTS 2026-07-08.
+import { PER_DOC_TOKEN_CAP, AGGREGATE_TOKEN_CAP } from "@devdigest/shared/contracts/context";
 import {
   useContextDocs,
   useContextFilePreview,

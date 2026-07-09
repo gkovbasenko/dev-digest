@@ -49,6 +49,7 @@ Adapters are external — they sit outside the onion and are reached only throug
 - [rules/container.md](rules/container.md) — DI container: resolving, adding, testing
 - [rules/adapters.md](rules/adapters.md) — adapter pattern, interface contract, error wrapping
 - [rules/forbidden.md](rules/forbidden.md) — cross-layer violations and anti-patterns
+- [rules/correct-patterns.md](rules/correct-patterns.md) — patterns that look like violations but are correct here — don't flag these
 
 ## Quick layer reference
 

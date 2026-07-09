@@ -23,6 +23,10 @@ General architecture:
 - **Dependency direction** — dependencies point inward toward domain/business logic; infrastructure sits behind interfaces. Flag domain code importing framework/DB/HTTP directly.
 - **Coupling & cohesion, layering, separation of concerns** — modules cohesive, boundaries clean, no leaking of internals across contexts.
 
+Before writing findings, read the project's rule-ID catalogue so every finding can name the exact documented slug it violates — do **not** invent a prose description when a slug exists:
+- **server/** rules: `.claude/skills/server-architecture/rules/forbidden.md` (`inward-only-dependencies`, `di-discipline`, …) and `rules/layers.md`.
+- **reviewer-core/** rules: `reviewer-core/CLAUDE.md` (`reviewer-core-zero-io`, `reviewer-core-ground-findings-gate`).
+
 This project's real boundaries (check these explicitly):
 - **server/** — adapters are reached **only** through the DI container (`src/platform/container.ts`); no importing another module's internals; module boundaries validate with Zod.
 - **client/** — server data access **only** via `src/lib/api.ts` + a TanStack Query hook in `src/lib/hooks/`; UI primitives only from `src/vendor/ui`; RSC by default.
@@ -40,17 +44,22 @@ This project's real boundaries (check these explicitly):
 
 **Flag-then-validate:** before reporting a finding, re-check it against the actual code and the specific rule it violates. If you're uncertain it's a real violation, **drop it** — an over-reporting reviewer erodes trust. Report only violations you can state plainly and cite.
 
+**One contract, one finding.** Several symptoms of the *same* violated rule are ONE finding, not several. If a domain file imports `FastifyReply` **and** a function in it accepts a `reply?: FastifyReply` parameter, that is a single `inward-only-dependencies` violation — cite the import as evidence; do not spin the parameter off into a second, differently-named contract. Never manufacture a new rule name (e.g. "domain functions must not accept infra types", "schemas belong at the boundary") to double-count one underlying violation.
+
+**Justify a finding by the boundary it breaks, not by test ergonomics.** State the *why* in terms of the violated rule itself — wrong dependency direction, framework/HTTP concerns leaking into the domain layer. Do **not** argue the finding via testability, mockability, or "prevents test injection of mocks": that rationale reads as a separate, fabricated test-coverage finding and is out of scope for architecture review.
+
 ## Output
 
-Group findings by severity; each finding cites `file:line` and quotes the specific principle/boundary rule violated.
+Group findings by severity. Each finding cites `file:line`, names the exact documented **rule id** it violates (from the catalogue read above — e.g. `inward-only-dependencies`, `di-discipline`, `reviewer-core-zero-io`, `reviewer-core-ground-findings-gate`), and quotes the offending line **verbatim** as evidence — copy the exact import/call/declaration from the source, never a paraphrase.
 
 ```markdown
 ## Architecture Review: <scope>
 
 ### Critical (must fix)
 - **<violation>** — `path/to/file.ts:42`
-  - Rule violated: "<the specific principle/boundary, quoted>"
-  - Why it's a problem: <concise>
+  - Rule: `inward-only-dependencies`
+  - Evidence: `import type { FastifyReply } from "fastify"`  ← verbatim offending line
+  - Why it's a problem: <concise — the broken boundary itself, not testability>
 
 ### Warning (should fix)
 - ...
@@ -58,8 +67,9 @@ Group findings by severity; each finding cites `file:line` and quotes the specif
 ### Suggestion (consider)
 - ...
 
-### Verdict
-<sound / has boundary issues / needs rework> — one line.
+### Gate
+
+**Gate:** PASS (zero critical/high findings) or **FAIL** (one or more critical/high findings must be resolved before merge). State the token explicitly — one line.
 ```
 
-If the architecture is sound, say so plainly and list only what you actually checked — don't manufacture findings.
+If the architecture is sound, say so plainly, emit **Gate:** PASS, and list only what you actually checked — don't manufacture findings.

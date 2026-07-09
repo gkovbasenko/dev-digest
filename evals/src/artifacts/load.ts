@@ -21,10 +21,14 @@ export function skillContent(skillName: string): string {
   const skillMd = join(dir, "SKILL.md");
   if (!existsSync(skillMd)) throw new Error(`SKILL.md not found: ${skillMd}`);
   const parts = [readFileSync(skillMd, "utf8")];
-  const refs = join(dir, "references");
-  if (existsSync(refs)) {
-    for (const f of readdirSync(refs).filter((f) => f.endsWith(".md")).sort()) {
-      parts.push(`\n\n## Reference: ${f}\n\n${readFileSync(join(refs, f), "utf8")}`);
+  // A skill's linked detail lives under references/ (docs) and/or rules/ (constraints). SKILL.md
+  // links to them, so the harness assembles them into context on demand — load both here or the
+  // eval judges only the SKILL.md shell.
+  for (const sub of ["references", "rules"]) {
+    const subDir = join(dir, sub);
+    if (!existsSync(subDir)) continue;
+    for (const f of readdirSync(subDir).filter((f) => f.endsWith(".md")).sort()) {
+      parts.push(`\n\n## ${sub === "rules" ? "Rule" : "Reference"}: ${f}\n\n${readFileSync(join(subDir, f), "utf8")}`);
     }
   }
   return parts.join("\n");

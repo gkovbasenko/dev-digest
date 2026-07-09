@@ -9,6 +9,18 @@ metadata:
 
 These are hard rules. If you see them in a review, reject them.
 
+## Rule IDs (cite these slugs in a review)
+
+Every finding in an architecture review names the canonical rule id it violates — not an
+ad-hoc prose description. The server-layer ids:
+
+| id | rule |
+|----|------|
+| `inward-only-dependencies` | Dependencies point inward only. An inner layer (domain, service) must not import an outer-layer type — Fastify, Drizzle, an adapter, or any framework/IO type. A domain function that imports or accepts a `FastifyReply`/`FastifyRequest` is the same one violation, not two. |
+| `di-discipline` | Concrete adapters, repositories, and services are constructed only in `platform/container.ts`. Any `new ConcreteX()` elsewhere violates it (see #2 below). |
+
+reviewer-core carries its own ids (`reviewer-core-zero-io`, `reviewer-core-ground-findings-gate`) — see `reviewer-core/CLAUDE.md`.
+
 ## 1. Adapter call in a route handler
 
 ```ts

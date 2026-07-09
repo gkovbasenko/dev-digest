@@ -19,6 +19,27 @@ Context-injection only. Not documentation. Read linked docs on demand.
 
 Each module has its own `CLAUDE.md`. Run commands from inside the module dir.
 
+## Commands
+
+Harness evals (skills + subagents + workflow) live in `evals/` — vitest + Claude Agent SDK, on the subscription (no API token). Run from `evals/`:
+
+- `cd evals && pnpm eval` — all quality + workflow evals once
+- `pnpm eval:quality` — static SKILL.md gate (frontmatter/structure/links; no model, fast)
+- `pnpm eval:skills` · `pnpm eval:agents` · `pnpm eval:workflow` — one tier
+- `pnpm vitest run skills/<name>` (or `agents/<name>`) — a single artifact
+
+## Read when — you touch the harness
+
+**Rule:** if you change `.claude/skills/*`, `.claude/agents/*`, or any `CLAUDE.md`, run the matching eval **before committing**. A skill/agent without an eval case under `evals/` has nothing to run — add one via `pnpm eval:scaffold <name>` instead of skipping.
+
+| You changed | Run before commit |
+|---|---|
+| A skill under `.claude/skills/<name>/` | `cd evals && pnpm vitest run skills/<name>` + `pnpm eval:quality` |
+| An agent `.claude/agents/<name>.md` | `pnpm vitest run agents/<name>` |
+| Routing / docs wiring in any `CLAUDE.md` | `pnpm eval:workflow` |
+| Only SKILL.md frontmatter / structure / links | `pnpm eval:quality` |
+| Broad or cross-cutting harness change | `pnpm eval` |
+
 ## Non-default conventions
 
 - **Not a workspace.** Cross-module wiring is via tsconfig path aliases; each module has its own lockfile. `pnpm-workspace.yaml` files in `client/`/`server/` are not a monorepo setup.

@@ -14,7 +14,7 @@ Always run all four steps below and produce all four output sections. A dependen
 ## Scope
 
 | Package | Path | package.json |
-|---------|------|---------------|
+|---------|------|--------------|
 | `@devdigest/api` | `server/` | `server/package.json` |
 | `@devdigest/web` | `client/` | `client/package.json` |
 | `@devdigest/reviewer-core` | `reviewer-core/` | `reviewer-core/package.json` |

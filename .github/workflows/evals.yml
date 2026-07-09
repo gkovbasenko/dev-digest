@@ -1,0 +1,180 @@
+# Harness evals — per-PR gate for the Claude Code harness (skills + subagents + workflow).
+#
+# Runs on OpenRouter (no Anthropic subscription in CI). The three tiers split by backend:
+#   * skills   — content-only, DIRECT OpenRouter call, no proxy. Cheap model (DeepSeek).
+#   * agents   — tool tier, Claude Agent SDK routed through the bundled LiteLLM proxy.
+#   * workflow — tool tier, same proxy. Both assert on subagent dispatch → need a
+#                dispatch-capable model (Gemini Flash; DeepSeek does NOT dispatch — see
+#                evals/README.md "Which cheap model — verified").
+#
+# Conditional dispatch (job `detect` reads the PR diff):
+#   .claude/skills/<name>/**  → run evals/skills/<name>/ IF it exists (else ::warning, pass)
+#   .claude/agents/**         → agents tier
+#   any CLAUDE.md             → workflow tier
+#   evals/ internals          → typecheck + every tier
+#
+# Model switch (no UI): edit the defaults below, or set repo variables
+# EVAL_SKILLS_MODEL / EVAL_TOOL_MODEL (Settings → Secrets and variables → Actions → Variables).
+# These are repo *variables*, not workflow_dispatch inputs, so nothing shows in the run form.
+name: evals
+
+on:
+  pull_request:
+    paths:
+      - '.claude/skills/**'
+      - '.claude/agents/**'
+      - 'CLAUDE.md'
+      - '**/CLAUDE.md'
+      - 'evals/**'
+      - '.github/workflows/evals.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: evals-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  EVAL_BACKEND: openrouter
+  OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}   # repo Actions secret; also read by the proxy container
+
+jobs:
+  # ── Map the PR diff to the tiers that must run ────────────────────────────
+  detect:
+    name: detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      skills: ${{ steps.map.outputs.skills }}       # space-separated vitest patterns, e.g. "skills/server-architecture"
+      agents: ${{ steps.map.outputs.agents }}       # "true" | "false"
+      workflow: ${{ steps.map.outputs.workflow }}   # "true" | "false"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # need the base commit to diff against
+
+      - id: map
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          changed="$(git diff --name-only "$BASE_SHA"...HEAD)"
+          echo "Changed files:"; echo "$changed"; echo "---"
+
+          agents=false; workflow=false; engine=false; skill_names=""
+          while IFS= read -r f; do
+            [ -z "$f" ] && continue
+            case "$f" in
+              .claude/agents/*|evals/agents/*)          agents=true ;;
+            esac
+            case "$f" in
+              CLAUDE.md|*/CLAUDE.md|evals/workflow/*)    workflow=true ;;
+            esac
+            case "$f" in
+              evals/src/*|evals/proxy/*|evals/scripts/*|evals/package.json|evals/pnpm-lock.yaml|evals/vitest.config.ts|evals/tsconfig.json)
+                                                         engine=true ;;
+            esac
+            case "$f" in
+              .claude/skills/*/*|evals/skills/*/*)
+                name="${f#*skills/}"; name="${name%%/*}"
+                skill_names="$skill_names $name" ;;
+            esac
+          done <<< "$changed"
+
+          patterns=""
+          if [ "$engine" = true ]; then
+            # engine changed → exercise everything
+            agents=true; workflow=true
+            for d in evals/skills/*/; do patterns="$patterns skills/$(basename "$d")"; done
+          else
+            for name in $(printf '%s\n' $skill_names | sort -u); do
+              [ -z "$name" ] && continue
+              if [ -d "evals/skills/$name" ]; then
+                patterns="$patterns skills/$name"
+              else
+                echo "::warning title=Skill without eval::skill '$name' changed but has no eval coverage (evals/skills/$name/ missing) — skipped"
+              fi
+            done
+          fi
+
+          {
+            echo "skills=$(printf '%s' "$patterns" | xargs)"
+            echo "agents=$agents"
+            echo "workflow=$workflow"
+          } >> "$GITHUB_OUTPUT"
+          echo "→ skills='$(printf '%s' "$patterns" | xargs)' agents=$agents workflow=$workflow"
+
+  # ── Content tier: changed skills, direct OpenRouter (DeepSeek), no proxy ───
+  skills:
+    name: skills tier
+    needs: detect
+    if: needs.detect.outputs.skills != ''
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: evals
+    env:
+      # switch point (repo variable overrides the default, no UI)
+      EVAL_MODEL: ${{ vars.EVAL_SKILLS_MODEL || 'deepseek/deepseek-chat' }}
+      EVAL_JUDGE_MODEL: ${{ vars.EVAL_SKILLS_MODEL || 'deepseek/deepseek-chat' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: evals/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - name: Run changed-skill evals
+        run: pnpm vitest run ${{ needs.detect.outputs.skills }}
+
+  # ── Tool tiers: agents / workflow via the LiteLLM proxy (Gemini Flash) ─────
+  tool-tiers:
+    name: tool tiers (proxy)
+    needs: detect
+    if: needs.detect.outputs.agents == 'true' || needs.detect.outputs.workflow == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: evals
+    env:
+      OPENROUTER_BASE_URL: http://localhost:4000
+      # switch point (repo variable overrides the default, no UI). Must be dispatch-capable.
+      EVAL_MODEL: ${{ vars.EVAL_TOOL_MODEL || 'google/gemini-2.5-flash' }}
+      EVAL_JUDGE_MODEL: ${{ vars.EVAL_TOOL_MODEL || 'google/gemini-2.5-flash' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: evals/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+
+      # bring the translating proxy up (reads OPENROUTER_API_KEY from job env)
+      - name: Start LiteLLM proxy
+        run: docker compose -f proxy/docker-compose.yml up -d
+      - name: Wait for proxy
+        run: pnpm proxy:wait
+
+      - name: Agents tier
+        if: needs.detect.outputs.agents == 'true'
+        run: pnpm eval:agents
+      - name: Workflow tier
+        if: needs.detect.outputs.workflow == 'true'
+        run: pnpm eval:workflow
+
+      - name: Proxy logs (on failure)
+        if: failure()
+        run: docker compose -f proxy/docker-compose.yml logs --tail 100
+      - name: Stop proxy
+        if: always()
+        run: docker compose -f proxy/docker-compose.yml down

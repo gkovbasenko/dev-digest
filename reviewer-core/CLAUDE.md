@@ -2,6 +2,11 @@
 
 `@devdigest/reviewer-core` — pure review engine. No DB, no GitHub, no FS. The only side effect is an injected `LLMProvider`.
 
+## Rule IDs (cite these slugs in a review)
+
+- `reviewer-core-zero-io` — code under `reviewer-core/src/` does no I/O except through the injected `LLMProvider`. A direct `fs`/`node:fs`/`pg`/`http`/`octokit` import violates it.
+- `reviewer-core-ground-findings-gate` — the pipeline must pass findings through the grounding gate (`src/grounding.ts`) before emitting them. Returning findings on a path that skips the gate violates it.
+
 ## Stack
 
 - TypeScript 5.7 only — **no JS emit**, consumed as `.ts` source

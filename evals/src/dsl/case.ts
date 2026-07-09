@@ -65,6 +65,14 @@ export type WorkflowCase =
       expectSubagents?: string[];
       expectSkills?: string[];
       expectFilesRead?: string[];
+      /**
+       * Files that must NOT be read (absence assertion). Use to prove a workflow did NOT fire —
+       * e.g. an always-loaded skill like engineering-insights, which `activated()` can't detect
+       * (it's @import'd into context, never Skill-invoked nor Read), so its A/B is "did the model
+       * touch INSIGHTS.md or not". A forbid-list forces the full maxTurns run (no early stop), since
+       * you can only assert absence after giving the model the chance to (wrongly) read the file.
+       */
+      forbidFilesRead?: string[];
       maxTurns?: number;
     };
 
@@ -149,15 +157,21 @@ export function runWorkflowCases(cases: WorkflowCase[]): void {
         const subs = c.expectSubagents ?? [];
         const skls = c.expectSkills ?? [];
         const files = c.expectFilesRead ?? [];
+        const forbid = c.forbidFilesRead ?? [];
         const skillEngaged = (p: { skillsInvoked: string[]; filesRead: string[] }, skill: string) =>
           p.skillsInvoked.some((s) => s === skill || s.endsWith(`:${skill}`)) ||
           p.filesRead.some((f) => f.includes(`skills/${skill}/SKILL.md`));
         const result = await workflowTask(c.prompt, {
           maxTurns: c.maxTurns,
-          stopWhen: (p) =>
-            subs.every((s) => p.subagents.includes(s)) &&
-            skls.every((s) => skillEngaged(p, s)) &&
-            files.every((f) => p.filesRead.some((r) => r.includes(f))),
+          // Absence assertions can't be satisfied early — run the full budget so the model has the
+          // chance to (wrongly) read a forbidden file. Otherwise stop as soon as all positives hold.
+          stopWhen:
+            forbid.length > 0
+              ? undefined
+              : (p) =>
+                  subs.every((s) => p.subagents.includes(s)) &&
+                  skls.every((s) => skillEngaged(p, s)) &&
+                  files.every((f) => p.filesRead.some((r) => r.includes(f))),
         });
         logTrace(c.name, result);
         try {
@@ -175,6 +189,12 @@ export function runWorkflowCases(cases: WorkflowCase[]): void {
               result.filesRead.some((f) => f.includes(file)),
               `${file} not read | reads: ${result.filesRead.join(", ")}`,
             ).toBe(true);
+          }
+          for (const file of c.forbidFilesRead ?? []) {
+            expect(
+              result.filesRead.some((f) => f.includes(file)),
+              `${file} was read but must NOT be | reads: ${result.filesRead.join(", ")}`,
+            ).toBe(false);
           }
           expect(result.isError).toBe(false);
         } finally {

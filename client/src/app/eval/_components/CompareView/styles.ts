@@ -1,0 +1,55 @@
+import type { CSSProperties } from "react";
+
+export const s = {
+  wrap: { display: "flex", flexDirection: "column", gap: 20 } satisfies CSSProperties,
+  backRow: { display: "flex", alignItems: "center" } satisfies CSSProperties,
+  back: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
+    background: "none",
+    border: "none",
+    padding: 0,
+    fontSize: 13,
+    color: "var(--text-secondary)",
+    cursor: "pointer",
+  } satisfies CSSProperties,
+  h1: { fontSize: 20, fontWeight: 700, letterSpacing: "-0.01em" } satisfies CSSProperties,
+  table: {
+    display: "grid",
+    gridTemplateColumns: "160px 1fr 1fr 120px",
+    border: "1px solid var(--border)",
+    borderRadius: 10,
+    overflow: "hidden",
+    background: "var(--bg-elevated)",
+  } satisfies CSSProperties,
+  headCell: {
+    padding: "10px 16px",
+    background: "var(--bg-surface)",
+    borderBottom: "1px solid var(--border)",
+    fontSize: 11,
+    fontWeight: 700,
+    letterSpacing: "0.05em",
+    color: "var(--text-muted)",
+    textTransform: "uppercase",
+  } satisfies CSSProperties,
+  labelCell: {
+    padding: "10px 16px",
+    borderBottom: "1px solid var(--border)",
+    fontSize: 13,
+    fontWeight: 600,
+    color: "var(--text-secondary)",
+  } satisfies CSSProperties,
+  valueCell: {
+    padding: "10px 16px",
+    borderBottom: "1px solid var(--border)",
+    fontSize: 13,
+  } satisfies CSSProperties,
+  deltaCell: (positive: boolean | null): CSSProperties => ({
+    padding: "10px 16px",
+    borderBottom: "1px solid var(--border)",
+    fontSize: 13,
+    fontWeight: 600,
+    color: positive == null ? "var(--text-muted)" : positive ? "var(--ok)" : "var(--crit)",
+  }),
+} as const;

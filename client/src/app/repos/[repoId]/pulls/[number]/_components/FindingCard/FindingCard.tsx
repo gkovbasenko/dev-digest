@@ -17,7 +17,9 @@ import {
   type Severity,
   type Category,
 } from "@devdigest/ui";
-import type { FindingRecord, FindingActionKind } from "@devdigest/shared";
+import type { FindingRecord, FindingActionKind, EvalCase } from "@devdigest/shared";
+import { EvalCaseEditor } from "@/components/eval";
+import { useCreateEvalCaseFromFinding } from "@/lib/hooks/eval";
 import { SEV_COLOR, SEV_COLOR_FALLBACK } from "./constants";
 import { lineLabel } from "./helpers";
 import { githubBlobUrl } from "../../../../../../../lib/github-urls";
@@ -42,6 +44,8 @@ export function FindingCard({
 }) {
   const t = useTranslations("prReview");
   const [expanded, setExpanded] = React.useState(defaultExpanded ?? false);
+  const [evalCase, setEvalCase] = React.useState<EvalCase | null>(null);
+  const createEvalCase = useCreateEvalCaseFromFinding();
   const sevColor = SEV_COLOR[f.severity] ?? SEV_COLOR_FALLBACK;
   const fileHref =
     repoFullName && headSha
@@ -50,6 +54,13 @@ export function FindingCard({
   const accepted = !!f.accepted_at;
   const dismissed = !!f.dismissed_at;
   const muted = accepted || dismissed;
+  // Server pre-fills expected_output from the finding (accepted -> must_find,
+  // dismissed -> must_not_flag) and de-dupes on source_finding_id, so a
+  // re-click always opens the same case (T3).
+  const handleTurnIntoEvalCase = () => {
+    if (createEvalCase.isPending) return;
+    createEvalCase.mutate(f.id, { onSuccess: (created) => setEvalCase(created) });
+  };
 
   return (
     <div data-finding-id={f.id} style={s.card(!!focused, sevColor, muted)}>
@@ -109,9 +120,22 @@ export function FindingCard({
             >
               {t("finding.dismiss")}
             </Button>
+            {muted && (
+              <Button
+                kind="ghost"
+                size="sm"
+                icon="FlaskConical"
+                disabled={createEvalCase.isPending}
+                onClick={handleTurnIntoEvalCase}
+              >
+                {t("finding.turnIntoEvalCase")}
+              </Button>
+            )}
           </div>
         </div>
       )}
+
+      {evalCase && <EvalCaseEditor evalCase={evalCase} onClose={() => setEvalCase(null)} />}
     </div>
   );
 }

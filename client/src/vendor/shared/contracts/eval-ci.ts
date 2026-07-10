@@ -1,14 +1,14 @@
 import { z } from 'zod';
 import { Verdict, Finding } from './findings.js';
-import { EvalRun, EvalOwnerKind, Conformance } from './knowledge.js';
+import { EvalRun, EvalCaseResult, EvalOwnerKind, Conformance } from './knowledge.js';
 
 /**
  * A4 — Eval / CI / Compose / Conformance API contracts (L06).
  *
  * These EXTEND the barrel; they do not modify existing contract files. The base
- * `EvalRun`, `EvalCase`, `EvalOwnerKind`, `Conformance` live in `knowledge.ts`;
- * here we add the *API-facing* request/response shapes (records persisted in
- * `eval_runs`, `composed_reviews`, `ci_installations`, `ci_runs`,
+ * `EvalRun`, `EvalCase`, `EvalCaseResult`, `EvalOwnerKind`, `Conformance` live in
+ * `knowledge.ts`; here we add the *API-facing* request/response shapes (records
+ * persisted in `eval_runs`, `composed_reviews`, `ci_installations`, `ci_runs`,
  * `conformance_checks`) plus the eval-dashboard aggregate.
  */
 
@@ -29,26 +29,27 @@ export const EvalCaseInput = z.object({
 });
 export type EvalCaseInput = z.infer<typeof EvalCaseInput>;
 
-/** A persisted eval run row (one execution of a case), returned by the API. */
+/** A persisted eval run row (one execution of an owner's whole eval set), returned by the API. */
 export const EvalRunRecord = z.object({
   id: z.string(),
-  case_id: z.string(),
-  case_name: z.string().nullish(),
+  owner_id: z.string(),
+  owner_kind: EvalOwnerKind,
+  owner_version: z.number().int(),
   ran_at: z.string(),
-  actual_output: z.unknown(),
-  pass: z.boolean().nullable(),
   recall: z.number().nullable(),
   precision: z.number().nullable(),
   citation_accuracy: z.number().nullable(),
-  duration_ms: z.number().int().nullable(),
+  traces_passed: z.number().int(),
+  traces_total: z.number().int(),
+  case_results: z.array(EvalCaseResult),
+  duration_ms: z.number().int(),
   cost_usd: z.number().nullable(),
 });
 export type EvalRunRecord = z.infer<typeof EvalRunRecord>;
 
-/** Result of running a single case: the metrics (EvalRun) + the persisted row id. */
+/** Result of running an owner's eval set (single case or batch): aggregate metrics (EvalRun) + the persisted run row id. */
 export const EvalRunResult = z.object({
   run_id: z.string(),
-  case_id: z.string(),
   result: EvalRun,
 });
 export type EvalRunResult = z.infer<typeof EvalRunResult>;
@@ -56,9 +57,9 @@ export type EvalRunResult = z.infer<typeof EvalRunResult>;
 /** One point on the dashboard trend (per run, chronological). */
 export const EvalTrendPoint = z.object({
   ran_at: z.string(),
-  recall: z.number(),
-  precision: z.number(),
-  citation_accuracy: z.number(),
+  recall: z.number().nullable(),
+  precision: z.number().nullable(),
+  citation_accuracy: z.number().nullable(),
   pass_rate: z.number(),
   cost_usd: z.number().nullable(),
 });
@@ -70,23 +71,51 @@ export const EvalDashboard = z.object({
   owner_id: z.string().nullable(),
   cases_total: z.number().int(),
   current: z.object({
-    recall: z.number(),
-    precision: z.number(),
-    citation_accuracy: z.number(),
+    recall: z.number().nullable(),
+    precision: z.number().nullable(),
+    citation_accuracy: z.number().nullable(),
     traces_passed: z.number().int(),
     traces_total: z.number().int(),
     cost_usd: z.number().nullable(),
   }),
   delta: z.object({
-    recall: z.number(),
-    precision: z.number(),
-    citation_accuracy: z.number(),
+    recall: z.number().nullable(),
+    precision: z.number().nullable(),
+    citation_accuracy: z.number().nullable(),
   }),
   trend: z.array(EvalTrendPoint),
   recent_runs: z.array(EvalRunRecord),
+  /** Per-agent summary cards for the workspace-level dashboard (no `?agentId=`). */
+  agents: z.array(
+    z.object({
+      agent_id: z.string(),
+      agent_name: z.string(),
+      recall: z.number().nullable(),
+      precision: z.number().nullable(),
+      citation_accuracy: z.number().nullable(),
+      sparkline: z.array(z.number()),
+      last_run_version: z.number().int().nullable(),
+      last_run_at: z.string().nullable(),
+      traces_passed: z.number().int().nullable(),
+      traces_total: z.number().int().nullable(),
+    }),
+  ),
   alert: z.string().nullable(),
 });
 export type EvalDashboard = z.infer<typeof EvalDashboard>;
+
+/** Side-by-side comparison of exactly two persisted runs (no re-run — AC-18). */
+export const EvalCompare = z.object({
+  a: EvalRunRecord,
+  b: EvalRunRecord,
+  delta: z.object({
+    recall: z.number().nullable(),
+    precision: z.number().nullable(),
+    citation_accuracy: z.number().nullable(),
+    pass_count: z.number().int(),
+  }),
+});
+export type EvalCompare = z.infer<typeof EvalCompare>;
 
 // ===========================================================================
 // Compose Review

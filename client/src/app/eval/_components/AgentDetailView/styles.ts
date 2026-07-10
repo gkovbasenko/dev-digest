@@ -1,0 +1,48 @@
+import type { CSSProperties } from "react";
+
+export const s = {
+  wrap: { display: "flex", flexDirection: "column", gap: 20 } satisfies CSSProperties,
+  backRow: { display: "flex", alignItems: "center" } satisfies CSSProperties,
+  back: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
+    background: "none",
+    border: "none",
+    padding: 0,
+    fontSize: 13,
+    color: "var(--text-secondary)",
+    cursor: "pointer",
+  } satisfies CSSProperties,
+  header: { display: "flex", alignItems: "center", gap: 10 } satisfies CSSProperties,
+  h1: { fontSize: 20, fontWeight: 700, letterSpacing: "-0.01em" } satisfies CSSProperties,
+  alert: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    padding: "10px 14px",
+    borderRadius: 8,
+    background: "var(--crit-bg)",
+    color: "var(--crit)",
+    fontSize: 13,
+    fontWeight: 550,
+  } satisfies CSSProperties,
+  cardsRow: { display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 } satisfies CSSProperties,
+  section: { display: "flex", flexDirection: "column", gap: 10 } satisfies CSSProperties,
+  sectionHeader: { display: "flex", alignItems: "center", justifyContent: "space-between" } satisfies CSSProperties,
+  sectionTitle: {
+    fontSize: 12,
+    fontWeight: 700,
+    letterSpacing: "0.06em",
+    color: "var(--text-muted)",
+    textTransform: "uppercase",
+  } satisfies CSSProperties,
+  legend: { display: "flex", gap: 14, fontSize: 12, color: "var(--text-secondary)" } satisfies CSSProperties,
+  legendItem: { display: "inline-flex", alignItems: "center", gap: 6 } satisfies CSSProperties,
+  legendDot: (color: string): CSSProperties => ({
+    width: 8,
+    height: 8,
+    borderRadius: 99,
+    background: color,
+  }),
+} as const;

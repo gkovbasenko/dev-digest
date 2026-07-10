@@ -1,6 +1,7 @@
-import { pgTable, uuid, text, integer, boolean, jsonb, timestamp, doublePrecision } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, integer, jsonb, timestamp, doublePrecision } from 'drizzle-orm/pg-core';
 import { workspaces } from './core';
 import { pullRequests } from './pulls';
+import { findings } from './reviews';
 
 // ============================================================ Eval / Conformance / Compose
 
@@ -17,19 +18,24 @@ export const evalCases = pgTable('eval_cases', {
   inputMeta: jsonb('input_meta'),
   expectedOutput: jsonb('expected_output'),
   notes: text('notes'),
+  /** Finding this case was created from ("Turn into eval case"); polymorphic-owner de-dupe key. */
+  sourceFindingId: uuid('source_finding_id').references(() => findings.id, { onDelete: 'set null' }),
 });
 
 export const evalRuns = pgTable('eval_runs', {
   id: uuid('id').primaryKey().defaultRandom(),
-  caseId: uuid('case_id')
-    .notNull()
-    .references(() => evalCases.id, { onDelete: 'cascade' }),
+  /** Polymorphic owner (agent or skill) of the whole eval set this run scored — no FK (owner may be deleted). */
+  ownerId: uuid('owner_id').notNull(),
+  ownerKind: text('owner_kind', { enum: ['agent', 'skill'] }).notNull(),
+  ownerVersion: integer('owner_version').notNull(),
   ranAt: timestamp('ran_at', { withTimezone: true }).defaultNow().notNull(),
-  actualOutput: jsonb('actual_output'),
-  pass: boolean('pass'),
   recall: doublePrecision('recall'),
   precision: doublePrecision('precision'),
   citationAccuracy: doublePrecision('citation_accuracy'),
+  tracesPassed: integer('traces_passed').notNull(),
+  tracesTotal: integer('traces_total').notNull(),
+  /** Array of EvalCaseResult (one entry per case scored in this run). */
+  caseResults: jsonb('case_results').notNull(),
   durationMs: integer('duration_ms'),
   costUsd: doublePrecision('cost_usd'),
 });

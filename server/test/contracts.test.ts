@@ -140,7 +140,20 @@ describe('AI contracts parse fixtures', () => {
         traces_total: 20,
         duration_ms: 12000,
         cost_usd: 0.23,
-        per_trace: [{ name: 't01', pass: true, expected: 'x', actual: 'x' }],
+        case_results: [
+          {
+            case_id: 'c01',
+            name: 't01',
+            pass: true,
+            expected: 1,
+            got: 1,
+            recall: null,
+            precision: null,
+            cost_usd: null,
+            duration_ms: 1200,
+            actual: 'x',
+          },
+        ],
       }),
     ).not.toThrow();
     expect(() =>

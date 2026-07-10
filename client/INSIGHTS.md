@@ -5,6 +5,12 @@ Newest first. See `.claude/skills/engineering-insights/SKILL.md` for what belong
 
 ---
 
+## 2026-07-10 — AgentEditor tabs have TWO sources of truth: adding to `TABS` renders the tab but a missing `VALID_TABS` entry makes it un-openable, and component tests can't catch it
+
+The editor tab bar is driven by `TABS` (`AgentEditor/constants.ts`), but the active tab is gated a SECOND time in the page: `const tab = VALID_TABS.includes(search.get("tab") ?? "") ? … : "config"` (`client/src/app/agents/[id]/page.tsx:15,27`). Add a tab to `TABS` only → the tab button renders and `setTab` pushes `?tab=<key>`, but the page reads it back through `VALID_TABS`, doesn't find the key, and falls back to `"config"` — so the new tab is visible yet **can never open** (URL flips to `?tab=evals`, content stays Config). `AgentEditor.test.tsx` passes `tab="evals"` as a prop directly, bypassing the page-level gate, so typecheck + unit tests stay green while the live app is broken. Only driving the real page (click the tab, observe it doesn't switch) surfaces it. When adding an editor tab, update BOTH `TABS` and `VALID_TABS`.
+
+**Evidence:** this session (2026-07-10); the Eval Pipeline's `evals` tab was added to `TABS` but not `VALID_TABS`; found by driving `/agents/:id?tab=evals` in a browser (tab stayed on Config); one-line fix `VALID_TABS = [...,"evals"]` at `page.tsx:15`.
+
 ## 2026-07-08 — A *runtime* (value) import from the `@devdigest/shared` barrel breaks the client webpack build; every prior import was type-only
 
 `client/src/vendor/shared/index.ts` re-exports every contract with `.js` specifiers (`export * from './contracts/findings.js'`). Until now **every** client import from `@devdigest/shared` was `import type` (64 of them) — erased before webpack ever runs, so the barrel was never bundled at runtime and its `.js`→`.ts` resolution was never exercised. The Project Context tabs added the FIRST *value* import (`import { PER_DOC_TOKEN_CAP } from "@devdigest/shared"`), which forced webpack to bundle the barrel → `Module not found: Can't resolve './contracts/findings.js'` for the whole re-export chain, 500-ing **every** route (both `next dev` and `next build`). `tsc` and `vitest` do NOT catch this — they resolve `.js`→`.ts` themselves, so typecheck + unit tests stay green while the app won't compile.

@@ -127,6 +127,20 @@
       "when": 1783531592545,
       "tag": "0017_burly_winter_soldier",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1783673566075,
+      "tag": "0018_foamy_thor",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1783673594856,
+      "tag": "0019_fantastic_post",
+      "breakpoints": true
     }
   ]
 }

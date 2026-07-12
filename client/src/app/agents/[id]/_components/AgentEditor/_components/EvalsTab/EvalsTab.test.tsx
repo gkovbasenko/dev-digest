@@ -159,6 +159,19 @@ describe("EvalsTab — per-case status across separate single-case runs", () => 
     expect(screen.getByText("expected 3 findings, got 1")).toBeInTheDocument();
   });
 
+  it("shows a 'Running…' status on every case row while a batch run is in flight", () => {
+    mockCases.current = [PASS_CASE, FAIL_CASE];
+    mockRuns.current = [makeRun()];
+    mockRunAllIsPending.current = true;
+
+    render(<EvalsTab agentId="ag1" />);
+
+    // Both rows flip to the running indicator; prior pass/fail labels are hidden.
+    expect(screen.getAllByText("Running…").length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryByText("Pass")).not.toBeInTheDocument();
+    expect(screen.queryByText("Fail")).not.toBeInTheDocument();
+  });
+
   it("opens the editor when a case row is clicked (not only the edit icon)", () => {
     mockCases.current = [PASS_CASE];
     mockRuns.current = [makeRun()];

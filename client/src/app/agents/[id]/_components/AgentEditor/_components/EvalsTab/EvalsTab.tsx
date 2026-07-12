@@ -52,6 +52,7 @@ export function EvalsTab({ agentId }: { agentId: string }) {
           <Button
             kind="secondary"
             icon="Play"
+            loading={runAll.isPending}
             onClick={() => runAll.mutate(agentId)}
             disabled={runAll.isPending || total === 0}
           >
@@ -86,7 +87,13 @@ export function EvalsTab({ agentId }: { agentId: string }) {
           />
         ) : (
           caseList.map((c) => (
-            <CaseRow key={c.id} evalCase={c} runs={runs} onEdit={() => setEditingCase(c)} />
+            <CaseRow
+              key={c.id}
+              evalCase={c}
+              runs={runs}
+              batchRunning={runAll.isPending}
+              onEdit={() => setEditingCase(c)}
+            />
           ))
         )}
       </div>
@@ -99,21 +106,26 @@ export function EvalsTab({ agentId }: { agentId: string }) {
 function CaseRow({
   evalCase,
   runs,
+  batchRunning,
   onEdit,
 }: {
   evalCase: EvalCase;
   runs: EvalRunRecord[] | undefined;
+  batchRunning: boolean;
   onEdit: () => void;
 }) {
   const runCase = useRunEvalCase();
   const deleteCase = useDeleteEvalCase();
 
-  const status = deriveCaseStatus(evalCase.id, runs);
-  const resultText = caseResultText(evalCase.id, runs);
+  // Runs are synchronous LLM calls with no SSE progress — surface the in-flight
+  // state on the row (spinner status + spinning Play) so a click gives feedback.
+  const running = runCase.isPending || batchRunning;
+  const status = running ? "running" : deriveCaseStatus(evalCase.id, runs);
+  const resultText = running ? "running…" : caseResultText(evalCase.id, runs);
   const badge = deriveCaseBadge(evalCase.expected_output);
 
   const handleRun = () => {
-    if (runCase.isPending) return;
+    if (running) return;
     runCase.mutate(evalCase.id);
   };
 
@@ -157,7 +169,12 @@ function CaseRow({
         )}
       </div>
       <div style={s.rowActions} onClick={stop}>
-        <IconBtn icon="Play" label={`Run ${evalCase.name}`} onClick={handleRun} />
+        <IconBtn
+          icon="Play"
+          label={running ? `Running ${evalCase.name}` : `Run ${evalCase.name}`}
+          loading={running}
+          onClick={handleRun}
+        />
         <IconBtn icon="Edit" label={`Edit ${evalCase.name}`} onClick={onEdit} />
         <IconBtn icon="Trash" label={`Delete ${evalCase.name}`} onClick={handleDelete} danger />
       </div>

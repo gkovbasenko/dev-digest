@@ -4,12 +4,13 @@
 import React from "react";
 import { Icon } from "@devdigest/ui";
 
-export type EvalCaseStatus = "pass" | "fail" | "never_run";
+export type EvalCaseStatus = "pass" | "fail" | "never_run" | "running";
 
 const CONFIG: Record<EvalCaseStatus, { color: string; label: string }> = {
   pass: { color: "var(--ok)", label: "Pass" },
   fail: { color: "var(--crit)", label: "Fail" },
   never_run: { color: "var(--text-muted)", label: "Never run" },
+  running: { color: "var(--text-secondary)", label: "Running…" },
 };
 
 export function StatusIcon({ status }: { status: EvalCaseStatus }) {
@@ -27,6 +28,9 @@ export function StatusIcon({ status }: { status: EvalCaseStatus }) {
     >
       {status === "pass" && <Icon.CheckCircle size={14} />}
       {status === "fail" && <Icon.XCircle size={14} />}
+      {status === "running" && (
+        <Icon.RefreshCw size={14} style={{ animation: "ddspin 1s linear infinite" }} />
+      )}
       {status === "never_run" && (
         <span
           aria-hidden="true"

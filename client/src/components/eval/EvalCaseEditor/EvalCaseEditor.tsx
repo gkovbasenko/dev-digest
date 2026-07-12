@@ -79,8 +79,8 @@ export function EvalCaseEditor({
             Run on save
             <Toggle on={runOnSave} onChange={setRunOnSave} size={16} />
           </label>
-          <Button kind="primary" onClick={handleSave} disabled={saveDisabled}>
-            {saving ? "Saving…" : "Save"}
+          <Button kind="primary" onClick={handleSave} disabled={saveDisabled} loading={saving}>
+            {runCase.isPending ? "Running…" : updateCase.isPending ? "Saving…" : "Save"}
           </Button>
         </div>
       }

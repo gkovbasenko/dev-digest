@@ -3,7 +3,7 @@ import type { CSSProperties } from "react";
 export const s = {
   grid: {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
+    gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))",
     gap: 14,
   } satisfies CSSProperties,
   card: {
@@ -11,11 +11,14 @@ export const s = {
     flexDirection: "column",
     gap: 12,
     width: "100%",
+    minWidth: 0,
     textAlign: "left",
     background: "var(--bg-elevated)",
     border: "1px solid var(--border)",
     borderRadius: 8,
     padding: "var(--card-pad)",
+    // Hard guarantee: a sparkline (or long name) can never bleed onto a neighbour.
+    overflow: "hidden",
     cursor: "pointer",
     font: "inherit",
     color: "inherit",
@@ -40,8 +43,15 @@ export const s = {
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
   } satisfies CSSProperties,
-  metricsRow: { display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 10 } satisfies CSSProperties,
-  metrics: { display: "flex", gap: 14 } satisfies CSSProperties,
+  metricsRow: {
+    display: "flex",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    gap: 10,
+    minWidth: 0,
+  } satisfies CSSProperties,
+  metrics: { display: "flex", gap: 14, minWidth: 0, flex: "1 1 auto" } satisfies CSSProperties,
+  spark: { flexShrink: 0, lineHeight: 0 } satisfies CSSProperties,
   metric: { display: "flex", flexDirection: "column", gap: 2 } satisfies CSSProperties,
   metricLabel: {
     fontSize: 10,

@@ -43,7 +43,9 @@ export function AgentCardGrid({
                 <span className="tnum" style={s.metricValue}>{formatEvalPercent(agent.citation_accuracy)}</span>
               </div>
             </div>
-            <Sparkline data={agent.sparkline} w={60} h={22} />
+            <span style={s.spark}>
+              <Sparkline data={agent.sparkline} w={60} h={22} />
+            </span>
           </div>
           <div style={s.footer}>{formatLastRun(agent)}</div>
         </button>

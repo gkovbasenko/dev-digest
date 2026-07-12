@@ -18,6 +18,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/lib/hooks/eval", () => ({
   useEvalDashboard: () => mockDashboard.current,
   useAgentEvalRuns: () => mockRuns.current,
+  useRunAgentEvals: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue(undefined), isPending: false }),
 }));
 
 vi.mock("@/lib/hooks/agents", () => ({
@@ -118,6 +119,8 @@ describe("EvalDashboardView (AC-15/AC-19/AC-22)", () => {
     expect(screen.getAllByText("Security Reviewer")).toHaveLength(2);
     expect(screen.getByText("Perf Agent")).toBeInTheDocument();
     expect(screen.getByText("Recent eval runs · all agents")).toBeInTheDocument();
+    // "Run all agents" is offered in the workspace (list) view.
+    expect(screen.getByRole("button", { name: /Run all agents/ })).toBeInTheDocument();
     expect(screen.getAllByText("80%").length).toBeGreaterThan(0); // recall column of the one run row
   });
 
@@ -162,6 +165,8 @@ describe("EvalDashboardView (AC-15/AC-19/AC-22)", () => {
 
     expect(screen.getByRole("heading", { name: "Security Reviewer" })).toBeInTheDocument();
     expect(screen.getByText("Back to dashboard")).toBeInTheDocument();
+    // The workspace-level "Run all agents" button is not shown in agent-detail view.
+    expect(screen.queryByRole("button", { name: /Run all agents/ })).not.toBeInTheDocument();
   });
 
   it("shows an error state with a retry action when the dashboard fails to load", () => {

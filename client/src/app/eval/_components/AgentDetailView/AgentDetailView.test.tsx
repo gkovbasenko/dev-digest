@@ -3,6 +3,10 @@ import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import type { EvalDashboard, EvalRunRecord } from "@devdigest/shared";
 import { AgentDetailView } from "./AgentDetailView";
 
+vi.mock("@/lib/hooks/eval", () => ({
+  useRunAgentEvals: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue(undefined), isPending: false }),
+}));
+
 afterEach(cleanup);
 
 const TREND = [
@@ -57,6 +61,8 @@ describe("AgentDetailView (AC-16/AC-17/AC-19)", () => {
     expect(screen.getByText("TRACES PASSED")).toBeInTheDocument();
     expect(screen.getByText("17/20")).toBeInTheDocument();
     expect(screen.getByText("Metric trend")).toBeInTheDocument();
+    // "Run eval" runs this agent's whole eval set.
+    expect(screen.getByRole("button", { name: /Run eval/ })).toBeInTheDocument();
 
     // Three run rows, each version-linked.
     expect(screen.getByRole("link", { name: "v3" })).toHaveAttribute("href", "/agents/ag-1");

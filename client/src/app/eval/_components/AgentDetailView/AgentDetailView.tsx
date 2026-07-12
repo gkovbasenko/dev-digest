@@ -8,6 +8,7 @@
 import React from "react";
 import { Icon, LineChart, Button } from "@devdigest/ui";
 import type { EvalDashboard, EvalRunRecord } from "@devdigest/shared";
+import { useRunAgentEvals } from "@/lib/hooks/eval";
 import { EvalMetricCard } from "@/components/eval";
 import { CompareView } from "../CompareView";
 import { AgentRunsTable } from "./_components/AgentRunsTable";
@@ -29,6 +30,7 @@ export function AgentDetailView({
 }) {
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
   const [compareOpen, setCompareOpen] = React.useState(false);
+  const runEval = useRunAgentEvals();
 
   const toggleRun = (id: string) => {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -64,6 +66,17 @@ export function AgentDetailView({
       <div style={s.header}>
         <Icon.Cpu size={18} style={{ color: "var(--accent)" }} />
         <h1 style={s.h1}>{agentName}</h1>
+        <div style={{ marginLeft: "auto" }}>
+          <Button
+            kind="primary"
+            icon="Play"
+            loading={runEval.isPending}
+            disabled={runEval.isPending || dashboard.cases_total === 0}
+            onClick={() => runEval.mutate(agentId)}
+          >
+            {runEval.isPending ? "Running…" : "Run eval"}
+          </Button>
+        </div>
       </div>
 
       {dashboard.alert && (

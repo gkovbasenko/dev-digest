@@ -7,9 +7,9 @@
 
 import React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Icon, Skeleton, ErrorState } from "@devdigest/ui";
+import { Icon, Skeleton, ErrorState, Button } from "@devdigest/ui";
 import { AppShell } from "@/components/app-shell";
-import { useEvalDashboard, useAgentEvalRuns } from "@/lib/hooks/eval";
+import { useEvalDashboard, useAgentEvalRuns, useRunAgentEvals } from "@/lib/hooks/eval";
 import { useAgent } from "@/lib/hooks/agents";
 import { AgentCardGrid } from "../AgentCardGrid";
 import { RecentRunsTable } from "../RecentRunsTable";
@@ -25,9 +25,31 @@ export function EvalDashboardView() {
   const { data: dashboard, isLoading, isError, refetch } = useEvalDashboard(agentId);
   const { data: runs } = useAgentEvalRuns(agentId);
   const { data: agent } = useAgent(agentId);
+  const runAgent = useRunAgentEvals();
+  const [runningAll, setRunningAll] = React.useState(false);
 
   const selectAgent = (id: string | null) => {
     router.replace(id ? `/eval?agentId=${id}` : "/eval");
+  };
+
+  // Run every agent's eval set. No batch endpoint exists (each agent's run is
+  // its own POST /agents/:id/eval-runs), so drive them sequentially through the
+  // same hook; a per-agent failure surfaces via the global mutation toast and
+  // does not abort the remaining agents.
+  const runAllAgents = async () => {
+    if (runningAll || !dashboard) return;
+    setRunningAll(true);
+    try {
+      for (const a of dashboard.agents) {
+        try {
+          await runAgent.mutateAsync(a.agent_id);
+        } catch {
+          /* global MutationCache onError toast reports it; keep going */
+        }
+      }
+    } finally {
+      setRunningAll(false);
+    }
   };
 
   const crumb = [
@@ -39,9 +61,22 @@ export function EvalDashboardView() {
   return (
     <AppShell crumb={crumb}>
       <div style={s.page}>
-        <div style={s.header}>
-          <h1 style={s.h1}>Eval Dashboard</h1>
-          <p style={s.subtitle}>Recall, precision and citation accuracy across every agent's eval set.</p>
+        <div style={s.headerRow}>
+          <div style={s.header}>
+            <h1 style={s.h1}>Eval Dashboard</h1>
+            <p style={s.subtitle}>Recall, precision and citation accuracy across every agent's eval set.</p>
+          </div>
+          {!agentId && dashboard && dashboard.agents.length > 0 && (
+            <Button
+              kind="primary"
+              icon="Play"
+              loading={runningAll}
+              disabled={runningAll}
+              onClick={runAllAgents}
+            >
+              {runningAll ? "Running…" : "Run all agents"}
+            </Button>
+          )}
         </div>
 
         {isLoading && (

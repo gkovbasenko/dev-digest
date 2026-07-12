@@ -12,6 +12,7 @@ export const s = {
     marginBottom: 14,
   } satisfies CSSProperties,
   h2: { fontSize: 16, fontWeight: 700 } satisfies CSSProperties,
+  titleActions: { display: "flex", alignItems: "center", gap: 8 } satisfies CSSProperties,
   metrics: {
     display: "grid",
     gridTemplateColumns: "repeat(4, minmax(0, 1fr))",

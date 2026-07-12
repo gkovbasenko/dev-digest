@@ -12,12 +12,13 @@ const { mockCreateMutate, mockCreateIsPending, mockUpdateMutate, mockRunMutate }
 }));
 
 // FindingCard uses useCreateEvalCaseFromFinding directly; EvalCaseEditor (which
-// it opens on success) also pulls useUpdateEvalCase/useRunEvalCase from the
-// same module — mock all three so no real TanStack Query provider is needed.
+// it opens on success) also pulls useUpdateEvalCase/useRunEvalCase/useCreateEvalCase
+// from the same module — mock them all so no real TanStack Query provider is needed.
 vi.mock("@/lib/hooks/eval", () => ({
   useCreateEvalCaseFromFinding: () => ({ mutate: mockCreateMutate, isPending: mockCreateIsPending.current }),
   useUpdateEvalCase: () => ({ mutate: mockUpdateMutate, isPending: false }),
   useRunEvalCase: () => ({ mutate: mockRunMutate, isPending: false }),
+  useCreateEvalCase: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 import { FindingCard } from "./FindingCard";

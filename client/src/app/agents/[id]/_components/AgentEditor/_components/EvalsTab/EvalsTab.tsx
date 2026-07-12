@@ -3,15 +3,12 @@
    delete), the aggregate RECALL/PRECISION/CITATION ACCURACY/TRACES PASSED cards,
    and an "Eval cases X/Y passing" header — all sourced from the latest
    `eval_runs` row (T3). Renders under `s.tabBody` (own header/list layout, not
-   `s.body` — client INSIGHTS 2026-07-01). Case CREATION is out of scope: there
-   is no bare "create case" endpoint (cases originate from an accepted/dismissed
-   finding via T5's "Turn into eval case" on PR-detail), so the empty state's
-   "New eval case" action explains that and links to the Pull Requests list
-   rather than opening the editor with a case that doesn't exist yet. */
+   `s.body` — client INSIGHTS 2026-07-01). Cases can be authored from scratch
+   here ("New eval case" → EvalCaseEditor create mode) or born from an accepted/
+   dismissed finding via T5's "Turn into eval case" on PR-detail. */
 "use client";
 
 import React from "react";
-import { useRouter } from "next/navigation";
 import { Button, EmptyState, IconBtn, SeverityBadge, CategoryTag } from "@devdigest/ui";
 import type { EvalCase, EvalRunRecord } from "@devdigest/shared";
 import {
@@ -21,20 +18,17 @@ import {
   useRunEvalCase,
   useDeleteEvalCase,
 } from "@/lib/hooks/eval";
-import { useActiveRepo } from "@/lib/repo-context";
 import { EvalCaseEditor, StatusIcon, EvalMetricCard } from "@/components/eval";
 import { caseResultText, deriveCaseBadge, deriveCaseStatus, latestRunOf } from "./helpers";
 import { s } from "./styles";
 
 export function EvalsTab({ agentId }: { agentId: string }) {
-  const router = useRouter();
-  const { repoId } = useActiveRepo();
-
   const { data: cases } = useAgentEvalCases(agentId);
   const { data: runs } = useAgentEvalRuns(agentId);
   const runAll = useRunAgentEvals();
 
   const [editingCase, setEditingCase] = React.useState<EvalCase | null>(null);
+  const [creatingNew, setCreatingNew] = React.useState(false);
 
   const caseList = React.useMemo(() => cases ?? [], [cases]);
   const latestRun = React.useMemo(() => latestRunOf(runs), [runs]);
@@ -49,15 +43,20 @@ export function EvalsTab({ agentId }: { agentId: string }) {
       <div style={s.header}>
         <div style={s.titleRow}>
           <h2 style={s.h2}>{headerLabel}</h2>
-          <Button
-            kind="secondary"
-            icon="Play"
-            loading={runAll.isPending}
-            onClick={() => runAll.mutate(agentId)}
-            disabled={runAll.isPending || total === 0}
-          >
-            {runAll.isPending ? "Running…" : "Run all"}
-          </Button>
+          <div style={s.titleActions}>
+            <Button
+              kind="secondary"
+              icon="Play"
+              loading={runAll.isPending}
+              onClick={() => runAll.mutate(agentId)}
+              disabled={runAll.isPending || total === 0}
+            >
+              {runAll.isPending ? "Running…" : "Run all"}
+            </Button>
+            <Button kind="primary" icon="Plus" onClick={() => setCreatingNew(true)}>
+              New eval case
+            </Button>
+          </div>
         </div>
         <div style={s.metrics}>
           <EvalMetricCard label="RECALL" value={latestRun?.recall ?? null} />
@@ -78,12 +77,12 @@ export function EvalsTab({ agentId }: { agentId: string }) {
             title="No eval cases yet"
             body={
               <>
-                Eval cases are created from an accepted or dismissed finding on a pull request review —
-                open a finding on PR-detail and choose “Turn into eval case.”
+                Author one here, or create it from an accepted/dismissed finding on a pull request
+                review via “Turn into eval case.”
               </>
             }
             cta="New eval case"
-            onCta={() => router.push(repoId ? `/repos/${repoId}/pulls` : "/")}
+            onCta={() => setCreatingNew(true)}
           />
         ) : (
           caseList.map((c) => (
@@ -99,6 +98,7 @@ export function EvalsTab({ agentId }: { agentId: string }) {
       </div>
 
       {editingCase && <EvalCaseEditor evalCase={editingCase} onClose={() => setEditingCase(null)} />}
+      {creatingNew && <EvalCaseEditor agentId={agentId} onClose={() => setCreatingNew(false)} />}
     </div>
   );
 }

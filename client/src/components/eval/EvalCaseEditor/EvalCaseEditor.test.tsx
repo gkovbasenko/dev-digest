@@ -1,18 +1,20 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, within } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import type { EvalCase } from "@devdigest/shared";
 
-const { mockUpdateMutate, mockUpdateIsPending, mockRunMutate, mockRunIsPending } = vi.hoisted(() => ({
+const { mockUpdateMutate, mockUpdateIsPending, mockRunMutate, mockRunIsPending, mockCreateMutate } = vi.hoisted(() => ({
   mockUpdateMutate: vi.fn(),
   mockUpdateIsPending: { current: false },
   mockRunMutate: vi.fn(),
   mockRunIsPending: { current: false },
+  mockCreateMutate: vi.fn(),
 }));
 
 vi.mock("@/lib/hooks/eval", () => ({
   useUpdateEvalCase: () => ({ mutate: mockUpdateMutate, isPending: mockUpdateIsPending.current }),
   useRunEvalCase: () => ({ mutate: mockRunMutate, isPending: mockRunIsPending.current }),
+  useCreateEvalCase: () => ({ mutate: mockCreateMutate, isPending: false }),
 }));
 
 import { EvalCaseEditor } from "./EvalCaseEditor";
@@ -21,6 +23,7 @@ afterEach(() => {
   cleanup();
   mockUpdateMutate.mockReset();
   mockRunMutate.mockReset();
+  mockCreateMutate.mockReset();
   mockUpdateIsPending.current = false;
   mockRunIsPending.current = false;
 });
@@ -152,5 +155,38 @@ describe("EvalCaseEditor", () => {
     expect(screen.getByText("$0.0021")).toBeInTheDocument();
     expect(screen.getByText("Pass")).toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("create mode (agentId, no evalCase): authors a case via useCreateEvalCase, then closes", () => {
+    mockCreateMutate.mockImplementation((_input, opts) => {
+      opts?.onSuccess?.({ ...EVAL_CASE, id: "new-1", name: "brand-new" });
+    });
+    const onClose = vi.fn();
+    const onSaved = vi.fn();
+    render(
+      <NextIntlClientProvider locale="en" messages={{}}>
+        <EvalCaseEditor agentId="agent-1" onClose={onClose} onSaved={onSaved} />
+      </NextIntlClientProvider>,
+    );
+
+    // Titled "New eval case"; primary action is "Create", disabled until named.
+    expect(within(screen.getByRole("dialog")).getByText("New eval case")).toBeInTheDocument();
+    const createBtn = screen.getByRole("button", { name: "Create" });
+    expect(createBtn).toBeDisabled();
+
+    fireEvent.change(screen.getByPlaceholderText("e.g. missing-index-on-fk"), { target: { value: "brand-new" } });
+    fireEvent.change(screen.getByPlaceholderText(/diff --git/), {
+      target: { value: "diff --git a/x.ts b/x.ts\n+y" },
+    });
+    expect(createBtn).not.toBeDisabled();
+
+    fireEvent.click(createBtn);
+    expect(mockCreateMutate).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "brand-new", input_diff: "diff --git a/x.ts b/x.ts\n+y" }),
+      expect.any(Object),
+    );
+    expect(mockUpdateMutate).not.toHaveBeenCalled();
+    expect(onSaved).toHaveBeenCalledWith(expect.objectContaining({ name: "brand-new" }));
+    expect(onClose).toHaveBeenCalledOnce();
   });
 });

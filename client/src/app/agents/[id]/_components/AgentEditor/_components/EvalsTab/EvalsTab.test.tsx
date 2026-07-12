@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, within } from "@testing-library/react";
 import type { EvalCase, EvalRunRecord } from "@devdigest/shared";
 
 const {
@@ -11,6 +11,7 @@ const {
   mockRunCaseMutate,
   mockDeleteMutate,
   mockUpdateMutate,
+  mockCreateMutate,
 } = vi.hoisted(() => ({
   mockPush: vi.fn(),
   mockCases: { current: [] as EvalCase[] },
@@ -20,6 +21,7 @@ const {
   mockRunCaseMutate: vi.fn(),
   mockDeleteMutate: vi.fn(),
   mockUpdateMutate: vi.fn(),
+  mockCreateMutate: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -37,6 +39,7 @@ vi.mock("@/lib/hooks/eval", () => ({
   useRunEvalCase: () => ({ mutate: mockRunCaseMutate, isPending: false }),
   useDeleteEvalCase: () => ({ mutate: mockDeleteMutate, isPending: false }),
   useUpdateEvalCase: () => ({ mutate: mockUpdateMutate, isPending: false }),
+  useCreateEvalCase: () => ({ mutate: mockCreateMutate, isPending: false }),
 }));
 
 import { EvalsTab } from "./EvalsTab";
@@ -51,6 +54,7 @@ afterEach(() => {
   mockRunCaseMutate.mockReset();
   mockDeleteMutate.mockReset();
   mockUpdateMutate.mockReset();
+  mockCreateMutate.mockReset();
 });
 
 function makeCase(id: string, name: string, expectedOutput: unknown): EvalCase {
@@ -209,15 +213,30 @@ describe("EvalsTab (AC-6)", () => {
 });
 
 describe("EvalsTab — empty state", () => {
-  it("shows a 'New eval case' prompt (no bare create endpoint) that links out to the Pull Requests list", () => {
+  it("shows a 'New eval case' prompt that opens the create editor from scratch", () => {
     mockCases.current = [];
     mockRuns.current = [];
 
     render(<EvalsTab agentId="ag1" />);
 
     expect(screen.getByText("No eval cases yet")).toBeInTheDocument();
+    // The empty-state CTA (and the header action) open the create-mode editor —
+    // a modal titled "New eval case" — rather than navigating away.
+    fireEvent.click(screen.getAllByRole("button", { name: "New eval case" })[0]!);
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("New eval case")).toBeInTheDocument();
+  });
+});
+
+describe("EvalsTab — create from scratch", () => {
+  it("opens the create editor from the header action when cases already exist", () => {
+    mockCases.current = [PASS_CASE];
+    mockRuns.current = [makeRun()];
+
+    render(<EvalsTab agentId="ag1" />);
+
     fireEvent.click(screen.getByRole("button", { name: "New eval case" }));
-    expect(mockPush).toHaveBeenCalledWith("/repos/repo1/pulls");
+    expect(within(screen.getByRole("dialog")).getByText("New eval case")).toBeInTheDocument();
   });
 });
 

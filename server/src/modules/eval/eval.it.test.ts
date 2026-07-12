@@ -222,6 +222,44 @@ d('A4 eval module (Testcontainers pg)', () => {
     await app.close();
   });
 
+  it('creates an eval case from scratch (POST /agents/:id/eval-cases), no source finding', async () => {
+    const app = await appWith();
+    const agent = await createAgent(app);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: `/agents/${agent.id}/eval-cases`,
+      payload: {
+        name: 'authored-by-hand',
+        input_diff: 'diff --git a/src/x.ts b/src/x.ts\n+const q = 1;',
+        expected_output: {
+          must_find: [{ file: 'src/x.ts', start_line: 1, end_line: 1, severity: 'WARNING', category: 'bug', title: 'x' }],
+          must_not_flag: [],
+        },
+      },
+    });
+    expect(res.statusCode).toBe(201);
+    const evalCase = res.json();
+    expect(evalCase.owner_kind).toBe('agent');
+    expect(evalCase.owner_id).toBe(agent.id);
+    expect(evalCase.source_finding_id).toBeNull();
+    expect(evalCase.input_diff).toContain('const q = 1;');
+    expect(evalCase.expected_output.must_find).toHaveLength(1);
+
+    const list = await app.inject({ method: 'GET', url: `/agents/${agent.id}/eval-cases` });
+    expect(list.json()).toHaveLength(1);
+
+    // Unknown agent → 404.
+    const missing = await app.inject({
+      method: 'POST',
+      url: `/agents/${crypto.randomUUID()}/eval-cases`,
+      payload: { name: 'x' },
+    });
+    expect(missing.statusCode).toBe(404);
+
+    await app.close();
+  });
+
   it('AC-7/AC-8: whole-set run persists exactly ONE eval_runs row scored from the frozen diff, never touching git/github/repoIntel', async () => {
     const app = await appWith();
     const { pr } = await setupRepoAndPr(pg.handle.db, workspaceId);

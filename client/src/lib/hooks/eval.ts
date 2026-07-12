@@ -48,6 +48,21 @@ export interface UpdateEvalCaseInput {
   >;
 }
 
+export type CreateEvalCaseInput = { name: string } & Partial<
+  Pick<EvalCase, "input_diff" | "input_files" | "input_meta" | "expected_output" | "notes">
+>;
+
+/** `POST /agents/:id/eval-cases` — author a new eval case from scratch (owner is
+    the agent; the frozen input diff + expected output are supplied by hand). */
+export function useCreateEvalCase(agentId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateEvalCaseInput) =>
+      api.post<EvalCase>(`/agents/${agentId}/eval-cases`, input),
+    onSuccess: () => invalidateEvalQueries(qc),
+  });
+}
+
 /** `PUT /eval-cases/:id` — update an eval case (name / expected_output / notes / frozen input). */
 export function useUpdateEvalCase() {
   const qc = useQueryClient();

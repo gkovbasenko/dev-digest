@@ -47,6 +47,15 @@ export interface UpdateEvalCaseInput {
   notes?: string | null;
 }
 
+export interface CreateEvalCaseInput {
+  name: string;
+  input_diff?: string;
+  input_files?: unknown;
+  input_meta?: unknown;
+  expected_output?: unknown;
+  notes?: string | null;
+}
+
 /**
  * A4 — eval service. Business logic for eval-case CRUD, batch/single run
  * (replays the FROZEN `input_diff` through the exact live review pipeline,
@@ -116,6 +125,44 @@ export class EvalService {
       inputMeta: { pr_number: pull.number, pr_title: pull.title, head_sha: pull.headSha },
       expectedOutput,
       sourceFindingId: findingId,
+    });
+    return toEvalCaseDto(row);
+  }
+
+  /**
+   * Author an eval case from scratch (no source finding). The agent owns it and
+   * the caller supplies the frozen `input_diff` + `expected_output` by hand — the
+   * run pipeline later replays that diff verbatim, exactly as for a finding-born
+   * case. `expected_output` defaults to an empty expectation (no must_find /
+   * must_not_flag) so a case can be saved and filled in incrementally.
+   */
+  async createCase(
+    workspaceId: string,
+    agentId: string,
+    input: CreateEvalCaseInput,
+  ): Promise<EvalCase | undefined> {
+    const agent = await this.container.agentsRepo.getById(workspaceId, agentId);
+    if (!agent) return undefined;
+
+    let expectedOutput: ExpectedOutput = { must_find: [], must_not_flag: [] };
+    if (input.expected_output !== undefined) {
+      const parsed = ExpectedOutput.safeParse(input.expected_output);
+      if (!parsed.success) {
+        throw new ValidationError('Invalid expected_output', parsed.error.flatten());
+      }
+      expectedOutput = parsed.data;
+    }
+
+    const row = await this.repo.insertCase({
+      workspaceId,
+      ownerKind: 'agent',
+      ownerId: agentId,
+      name: input.name,
+      inputDiff: input.input_diff ?? '',
+      inputFiles: input.input_files ?? undefined,
+      inputMeta: input.input_meta ?? undefined,
+      expectedOutput,
+      notes: input.notes ?? undefined,
     });
     return toEvalCaseDto(row);
   }

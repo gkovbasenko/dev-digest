@@ -20,10 +20,21 @@ const UpdateEvalCaseBody = z.object({
   notes: z.string().nullish(),
 });
 
+/** Create-from-scratch payload; owner is the `:id` agent from the path. */
+const CreateEvalCaseBody = z.object({
+  name: z.string().min(1),
+  input_diff: z.string().optional(),
+  input_files: z.unknown().optional(),
+  input_meta: z.unknown().optional(),
+  expected_output: z.unknown().optional(),
+  notes: z.string().nullish(),
+});
+
 /**
  * A4 — eval module (dashboard-and-eval-set half of L06).
  *   POST   /findings/:findingId/eval-case  → create (or de-dupe-return) a case from a finding
  *   GET    /agents/:id/eval-cases          → an agent's whole eval set
+ *   POST   /agents/:id/eval-cases          → create a case from scratch (manual authoring)
  *   PUT    /eval-cases/:id                 → edit a case
  *   DELETE /eval-cases/:id                 → delete a case
  *   POST   /eval-cases/:id/run             → single-case run (AC-21 — editor "run on save")
@@ -52,6 +63,18 @@ export default async function evalRoutes(appBase: FastifyInstance) {
     if (!cases) throw new NotFoundError('Agent not found');
     return cases;
   });
+
+  app.post(
+    '/agents/:id/eval-cases',
+    { schema: { params: IdParams, body: CreateEvalCaseBody } },
+    async (req, reply) => {
+      const { workspaceId } = await getContext(app.container, req);
+      const evalCase = await service.createCase(workspaceId, req.params.id, req.body);
+      if (!evalCase) throw new NotFoundError('Agent not found');
+      reply.status(201);
+      return evalCase;
+    },
+  );
 
   app.put(
     '/eval-cases/:id',

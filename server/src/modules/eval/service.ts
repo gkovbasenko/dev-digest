@@ -331,7 +331,9 @@ export class EvalService {
     const agent = await this.container.agentsRepo.getById(workspaceId, agentId);
     if (!agent) throw new NotFoundError('Agent not found');
 
-    const runs = await this.repo.runsForOwner('agent', agentId); // newest first
+    // The dashboard consumes at most DASHBOARD_TREND_LIMIT runs (trend window is
+    // the widest use); cap the fetch instead of pulling the agent's whole history.
+    const runs = await this.repo.runsForOwner('agent', agentId, DASHBOARD_TREND_LIMIT); // newest first
     const casesTotal = await this.repo.casesCountForOwner(workspaceId, 'agent', agentId);
     const [latest, previous] = runs;
 
@@ -379,7 +381,9 @@ export class EvalService {
   private async getWorkspaceDashboard(workspaceId: string): Promise<EvalDashboard> {
     const agents = await this.container.agentsRepo.list(workspaceId);
     const agentIds = agents.map((a) => a.id);
-    const allRuns = await this.repo.runsForOwners('agent', agentIds); // newest first, all agents
+    // Per-agent cap (each card needs at most DASHBOARD_TREND_LIMIT newest runs);
+    // still globally newest-first, so the `recent_runs` slice below stays correct.
+    const allRuns = await this.repo.runsForOwners('agent', agentIds, DASHBOARD_TREND_LIMIT); // newest first, all agents
 
     const runsByAgent = new Map<string, EvalRunRow[]>();
     for (const run of allRuns) {

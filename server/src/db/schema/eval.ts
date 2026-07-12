@@ -1,4 +1,5 @@
-import { pgTable, uuid, text, integer, jsonb, timestamp, doublePrecision } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, integer, jsonb, timestamp, doublePrecision, index } from 'drizzle-orm/pg-core';
+import { desc } from 'drizzle-orm';
 import { workspaces } from './core';
 import { pullRequests } from './pulls';
 import { findings } from './reviews';
@@ -20,7 +21,10 @@ export const evalCases = pgTable('eval_cases', {
   notes: text('notes'),
   /** Finding this case was created from ("Turn into eval case"); polymorphic-owner de-dupe key. */
   sourceFindingId: uuid('source_finding_id').references(() => findings.id, { onDelete: 'set null' }),
-});
+}, (table) => [
+  // All case reads are owner-scoped (listByOwner / casesCountForOwner).
+  index('eval_cases_owner_idx').on(table.workspaceId, table.ownerKind, table.ownerId),
+]);
 
 export const evalRuns = pgTable('eval_runs', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -38,7 +42,10 @@ export const evalRuns = pgTable('eval_runs', {
   caseResults: jsonb('case_results').notNull(),
   durationMs: integer('duration_ms'),
   costUsd: doublePrecision('cost_usd'),
-});
+}, (table) => [
+  // Run reads are always owner-scoped + newest-first (runsForOwner / runsForOwners).
+  index('eval_runs_owner_ran_at_idx').on(table.ownerKind, table.ownerId, desc(table.ranAt)),
+]);
 
 export const conformanceChecks = pgTable('conformance_checks', {
   id: uuid('id').primaryKey().defaultRandom(),

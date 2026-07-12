@@ -1,0 +1,2 @@
+CREATE INDEX "eval_cases_owner_idx" ON "eval_cases" USING btree ("workspace_id","owner_kind","owner_id");--> statement-breakpoint
+CREATE INDEX "eval_runs_owner_ran_at_idx" ON "eval_runs" USING btree ("owner_kind","owner_id","ran_at" desc);

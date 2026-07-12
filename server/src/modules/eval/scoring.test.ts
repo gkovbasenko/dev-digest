@@ -181,6 +181,41 @@ describe('scoreCase (AC-9..AC-14)', () => {
     expect(s.result.pass).toBe(false); // not ALL must_find matched
   });
 
+  it('matches when the expected region has start_line > end_line (swapped bounds are normalized)', () => {
+    const expected: ExpectedOutput = {
+      must_find: [
+        // Deliberately inverted: regionsIntersect min/max-normalizes both sides.
+        { file: 'src/config.ts', start_line: 12, end_line: 10, severity: 'CRITICAL', category: 'security', title: 't' },
+      ],
+      must_not_flag: [],
+    };
+    const s = scoreCase({
+      caseId: 'c-swap',
+      name: 'swapped bounds',
+      expected,
+      actual: [finding({ start_line: 11, end_line: 11 })],
+      failed: false,
+      costUsd: null,
+      durationMs: 5,
+    });
+    expect(s.matchedMustFind).toBe(1);
+    expect(s.result.pass).toBe(true);
+  });
+
+  it('failed:true with NO failureReason falls back to the default "case failed" error', () => {
+    const s = scoreCase({
+      caseId: 'c-nofail',
+      name: 'failed without reason',
+      expected: EMPTY,
+      actual: [],
+      failed: true,
+      costUsd: null,
+      durationMs: 5,
+    });
+    expect(s.result.pass).toBe(false);
+    expect(s.result.actual).toEqual({ error: 'case failed' });
+  });
+
   it('precision: an extra unexpected finding counts as a false positive', () => {
     const expected: ExpectedOutput = {
       must_find: [
@@ -229,6 +264,15 @@ describe('aggregateRun (AC-8, D4)', () => {
       ...over,
     };
   }
+
+  it('an empty score set yields null metrics and zero traces (no cases scored)', () => {
+    const agg = aggregateRun([], { kept: 0, dropped: 0 });
+    expect(agg.recall).toBeNull();
+    expect(agg.precision).toBeNull();
+    expect(agg.citation_accuracy).toBeNull();
+    expect(agg.traces_passed).toBe(0);
+    expect(agg.traces_total).toBe(0);
+  });
 
   it('recall is null when no case in the set has a must_find region (D4)', () => {
     const scores = [withScore({}), withScore({})];

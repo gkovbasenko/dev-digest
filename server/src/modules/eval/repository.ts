@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, count, desc, eq, getTableColumns, inArray, lte, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 import type { EvalCaseResult, EvalOwnerKind } from '@devdigest/shared';
@@ -153,8 +153,17 @@ export class EvalRepository {
     ownerKind: EvalOwnerKind,
     ownerId: string,
   ): Promise<number> {
-    const rows = await this.listByOwner(workspaceId, ownerKind, ownerId);
-    return rows.length;
+    const [row] = await this.db
+      .select({ n: count() })
+      .from(t.evalCases)
+      .where(
+        and(
+          eq(t.evalCases.workspaceId, workspaceId),
+          eq(t.evalCases.ownerKind, ownerKind),
+          eq(t.evalCases.ownerId, ownerId),
+        ),
+      );
+    return row?.n ?? 0;
   }
 
   // ---- eval_runs (owner-scoped — see class doc) ---------------------------
@@ -193,14 +202,40 @@ export class EvalRepository {
     return limit ? q.limit(limit) : q;
   }
 
-  /** Runs across several owners (workspace-wide dashboard), newest first. */
-  async runsForOwners(ownerKind: EvalOwnerKind, ownerIds: string[]): Promise<EvalRunRow[]> {
+  /**
+   * Runs across several owners (workspace-wide dashboard), newest first.
+   * `perOwnerLimit` caps the rows returned PER owner via a `row_number()` window
+   * — the dashboard only ever needs the N newest runs of each agent, so this
+   * avoids transferring an agent's entire run history. The result stays globally
+   * newest-first, so a caller's global `recent_runs` slice is still correct
+   * (any globally-newest run is necessarily within its own owner's newest N).
+   */
+  async runsForOwners(
+    ownerKind: EvalOwnerKind,
+    ownerIds: string[],
+    perOwnerLimit?: number,
+  ): Promise<EvalRunRow[]> {
     if (ownerIds.length === 0) return [];
-    return this.db
-      .select()
+    const where = and(eq(t.evalRuns.ownerKind, ownerKind), inArray(t.evalRuns.ownerId, ownerIds));
+    if (!perOwnerLimit) {
+      return this.db.select().from(t.evalRuns).where(where).orderBy(desc(t.evalRuns.ranAt));
+    }
+    const ranked = this.db
+      .select({
+        ...getTableColumns(t.evalRuns),
+        rn: sql<number>`row_number() over (partition by ${t.evalRuns.ownerId} order by ${t.evalRuns.ranAt} desc)`.as(
+          'rn',
+        ),
+      })
       .from(t.evalRuns)
-      .where(and(eq(t.evalRuns.ownerKind, ownerKind), inArray(t.evalRuns.ownerId, ownerIds)))
-      .orderBy(desc(t.evalRuns.ranAt));
+      .where(where)
+      .as('ranked');
+    const rows = await this.db
+      .select()
+      .from(ranked)
+      .where(lte(ranked.rn, perOwnerLimit))
+      .orderBy(desc(ranked.ranAt));
+    return rows.map(({ rn: _rn, ...run }) => run);
   }
 
   async getRun(id: string): Promise<EvalRunRow | undefined> {

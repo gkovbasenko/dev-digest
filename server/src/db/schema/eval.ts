@@ -24,6 +24,8 @@ export const evalCases = pgTable('eval_cases', {
 }, (table) => [
   // All case reads are owner-scoped (listByOwner / casesCountForOwner).
   index('eval_cases_owner_idx').on(table.workspaceId, table.ownerKind, table.ownerId),
+  // "Turn into eval case" de-dupe looks a case up by its source finding.
+  index('eval_cases_source_finding_idx').on(table.sourceFindingId),
 ]);
 
 export const evalRuns = pgTable('eval_runs', {

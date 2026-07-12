@@ -5,6 +5,22 @@ Newest first. See `.claude/skills/engineering-insights/SKILL.md` for what belong
 
 ---
 
+## 2026-07-13 — The `relevantAgents`/`allFindings` memos on the PR-detail page correctly depend on `[reviews]` while reading the derived `runs` — reviewers keep flagging this as a bug; it is a false positive
+
+`client/src/app/repos/[repoId]/pulls/[number]/page.tsx` has `const runs = reviews ?? []` and two `React.useMemo`s (`allFindings`, `relevantAgents`) that iterate `runs` but list `[reviews]` as their dependency. `runs` is a **pure derivation of `reviews`** (identity when `reviews` is defined; a fresh `[]` only when it's null — in which case the memo returns the same empty result anyway), so `[reviews]` is a complete, correct dependency and `runs` can never be `null` (the `?? []` guarantees an array). dev-digest's own reviewers have flagged this ≥3× across review runs ("stale dependency", "wrong dependency array + no null guard on runs", escalating to CRITICAL/0.95, category drifting security→bug) — it is a **persistent false positive**, at most an `eslint-react-hooks/exhaustive-deps` stylistic nit (which would want `runs` listed), not a runtime bug. Do NOT "fix" it by adding `runs` to the deps or a null guard; if re-raised in a review, dismiss it and point here.
+
+**Evidence:** this session (2026-07-13); `page.tsx:72` (`runs = reviews ?? []`), `:73-76` (`allFindings` memo), `:82-88` (`relevantAgents` memo); PR #25 reruns flagged it via General Reviewer (bug, 0.95) after an earlier Perf/Security run flagged it (security, 0.85) — both dismissed.
+
+## 2026-07-13 — `LineChart` (`vendor/ui/charts`) defaults to a Y-domain of `[0.6, 1.0]` — it SILENTLY CLIPS any value below 0.6
+
+`LineChart`'s default `yMin=0.6, yMax=1.0` (`src/vendor/ui/charts/LineChart.tsx:23-24`) is tuned for the Showcase demo's 0.65–0.9 data. Recharts hard-clips points outside the axis `domain`, so any series value below 0.6 renders off the bottom and the line just disappears there — no error, no visual hint. This broke the `/eval` agent-detail "Metric trend" chart: recall/precision/citation are fractions that legitimately hit **0** for a failing agent (real data: recall 1→0→0, precision 0.4→0→0), so with the default domain the recall line dropped off-chart and the precision line was invisible from the start — only citation (=1, pinned to the top) showed. Fix: pass `yMin={0}` at the eval call site (`AgentDetailView.tsx`) — did NOT change the primitive default, since the Showcase relies on it and other future callers may want the zoomed-in look.
+
+**How to apply:** whenever you feed `LineChart` a 0..1 metric that can be low (recall/precision/pass-rate/any ratio that fails to 0), pass `yMin={0}` explicitly — never rely on the default domain. If a line "vanishes" partway across the chart, suspect domain clipping before data.
+
+**Evidence:** this session (2026-07-13); `src/vendor/ui/charts/LineChart.tsx` (`yMin=0.6` default), `src/app/eval/_components/AgentDetailView/AgentDetailView.tsx` (`yMin={0}` on the trend chart); live `GET /eval/dashboard?agentId=…` trend showed recall/precision at 0 while the chart hid them.
+
+---
+
 ## 2026-07-13 — A single-case eval run persists its OWN `eval_runs` row holding only that case; per-case UI status must scan ALL runs, not `latestRunOf`
 
 `POST /eval-cases/:id/run` calls `runCases(agent, [row])` (`server/src/modules/eval/service.ts`), which inserts a fresh `eval_runs` row whose `case_results` contains ONLY that one case. So run case A then case B individually → two run rows, the newest holding only B. The EvalsTab originally derived every row's status from `latestRunOf(runs)` (the single most-recent run) → case A, absent from that run's `case_results`, flipped to "never run". Reported as "run works in strange manner — ran 2, only one ran, the other became not run." Fix: derive each case's status from the most recent run that CONTAINS that case (`latestResultOf(caseId, runs)` scans all runs newest-first), not from one global latest run. The header/metric cards still legitimately read `latestRunOf` (one coherent run snapshot) — only the per-row status/result needed the all-runs scan. (Separately: the case row now has `onClick={onEdit}` so clicking the row — not just the pencil — opens the editor; row-action buttons `stopPropagation`.)

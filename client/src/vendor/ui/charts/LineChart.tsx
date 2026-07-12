@@ -21,12 +21,15 @@ export function LineChart({
   h = 200,
   yMin = 0.6,
   yMax = 1.0,
+  fill = false,
 }: {
   series: ChartSeries[];
   w?: number;
   h?: number;
   yMin?: number;
   yMax?: number;
+  /** Span the full width of the container instead of capping at `w`. */
+  fill?: boolean;
 }) {
   const n = series[0]?.data.length ?? 0;
   const rows = Array.from({ length: n }, (_, i) => {
@@ -37,7 +40,7 @@ export function LineChart({
     return row;
   });
   return (
-    <div style={{ width: "100%", maxWidth: w, height: h }}>
+    <div style={{ width: "100%", maxWidth: fill ? undefined : w, height: h }}>
       <ResponsiveContainer width="100%" height="100%">
         <RLineChart data={rows} margin={{ top: 14, right: 14, bottom: 8, left: -10 }}>
           <CartesianGrid stroke="var(--border)" vertical={false} />

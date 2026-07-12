@@ -135,6 +135,7 @@ export function AgentDetailView({
           </div>
         </div>
         <LineChart
+          fill
           yMin={0}
           series={[
             { name: "recall", color: "var(--accent)", data: trendSeries(trend, "recall") },

@@ -128,6 +128,50 @@ describe("EvalsTab (AC-5)", () => {
   });
 });
 
+describe("EvalsTab — per-case status across separate single-case runs", () => {
+  it("keeps each case's status from its own most recent run instead of flipping others to 'never run'", () => {
+    // Single-case runs each persist their own eval_runs row holding only that
+    // case. c1 ran later (newer), c2 earlier — both must keep their status.
+    mockCases.current = [PASS_CASE, FAIL_CASE];
+    mockRuns.current = [
+      makeRun({
+        id: "runA",
+        ran_at: "2026-07-11T00:00:00.000Z",
+        case_results: [
+          { case_id: "c1", name: "detects-secret", pass: true, expected: 2, got: 2, recall: 1, precision: 1, cost_usd: null, duration_ms: 10, actual: [] },
+        ],
+      }),
+      makeRun({
+        id: "runB",
+        ran_at: "2026-07-10T00:00:00.000Z",
+        case_results: [
+          { case_id: "c2", name: "flags-bug", pass: false, expected: 3, got: 1, recall: 0.33, precision: 0.5, cost_usd: null, duration_ms: 20, actual: [] },
+        ],
+      }),
+    ];
+
+    render(<EvalsTab agentId="ag1" />);
+
+    expect(screen.getByText("Pass")).toBeInTheDocument();
+    expect(screen.getByText("Fail")).toBeInTheDocument();
+    expect(screen.queryByText("Never run")).not.toBeInTheDocument();
+    expect(screen.getByText("expected 2 findings, got 2")).toBeInTheDocument();
+    expect(screen.getByText("expected 3 findings, got 1")).toBeInTheDocument();
+  });
+
+  it("opens the editor when a case row is clicked (not only the edit icon)", () => {
+    mockCases.current = [PASS_CASE];
+    mockRuns.current = [makeRun()];
+
+    render(<EvalsTab agentId="ag1" />);
+
+    // Clicking anywhere on the row (here the case name) bubbles to the row's
+    // onClick and opens the editor — not just the pencil icon.
+    fireEvent.click(screen.getByText("detects-secret"));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+});
+
 describe("EvalsTab (AC-6)", () => {
   it("shows four em-dash metric cards when the agent has no eval runs yet", () => {
     mockCases.current = [PASS_CASE];

@@ -20,21 +20,35 @@ export function latestRunOf(runs: EvalRunRecord[] | undefined): EvalRunRecord | 
   return [...runs].sort((a, b) => new Date(b.ran_at).getTime() - new Date(a.ran_at).getTime())[0];
 }
 
-function findCaseResult(caseId: string, latestRun: EvalRunRecord | undefined): EvalCaseResult | undefined {
-  return latestRun?.case_results.find((cr) => cr.case_id === caseId);
+/** Latest `case_result` for ONE case across ALL runs (newest-first). A single-
+    case run (`POST /eval-cases/:id/run`) persists its own `eval_runs` row holding
+    only that case, so a case's most recent result frequently lives in an OLDER
+    run than the global latest — scanning only `latestRunOf` wrongly flips every
+    other case back to "never run" the moment any single case is re-run. */
+export function latestResultOf(
+  caseId: string,
+  runs: EvalRunRecord[] | undefined,
+): EvalCaseResult | undefined {
+  if (!runs || runs.length === 0) return undefined;
+  const newestFirst = [...runs].sort((a, b) => new Date(b.ran_at).getTime() - new Date(a.ran_at).getTime());
+  for (const run of newestFirst) {
+    const result = run.case_results.find((cr) => cr.case_id === caseId);
+    if (result) return result;
+  }
+  return undefined;
 }
 
-/** pass/fail from the latest run's case_results, or "never_run" when the case
-    has no entry there (new case since the last run, or no run yet at all). */
-export function deriveCaseStatus(caseId: string, latestRun: EvalRunRecord | undefined): EvalCaseStatus {
-  const result = findCaseResult(caseId, latestRun);
+/** pass/fail from the case's most recent result in ANY run, or "never_run" when
+    the case has never appeared in a run. */
+export function deriveCaseStatus(caseId: string, runs: EvalRunRecord[] | undefined): EvalCaseStatus {
+  const result = latestResultOf(caseId, runs);
   if (!result) return "never_run";
   return result.pass ? "pass" : "fail";
 }
 
 /** "expected N finding(s), got M", or "never run". */
-export function caseResultText(caseId: string, latestRun: EvalRunRecord | undefined): string {
-  const result = findCaseResult(caseId, latestRun);
+export function caseResultText(caseId: string, runs: EvalRunRecord[] | undefined): string {
+  const result = latestResultOf(caseId, runs);
   if (!result) return "never run";
   return `expected ${result.expected} finding${result.expected === 1 ? "" : "s"}, got ${result.got}`;
 }

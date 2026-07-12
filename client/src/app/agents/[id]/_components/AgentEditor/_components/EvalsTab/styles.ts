@@ -27,6 +27,7 @@ export const s = {
     marginBottom: 2,
     background: "var(--bg-surface)",
     border: "1px solid var(--border)",
+    cursor: "pointer",
   } satisfies CSSProperties,
   rowMain: {
     flex: 1,

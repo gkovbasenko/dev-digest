@@ -5,6 +5,14 @@ Newest first. See `.claude/skills/engineering-insights/SKILL.md` for what belong
 
 ---
 
+## 2026-07-13 — A single-case eval run persists its OWN `eval_runs` row holding only that case; per-case UI status must scan ALL runs, not `latestRunOf`
+
+`POST /eval-cases/:id/run` calls `runCases(agent, [row])` (`server/src/modules/eval/service.ts`), which inserts a fresh `eval_runs` row whose `case_results` contains ONLY that one case. So run case A then case B individually → two run rows, the newest holding only B. The EvalsTab originally derived every row's status from `latestRunOf(runs)` (the single most-recent run) → case A, absent from that run's `case_results`, flipped to "never run". Reported as "run works in strange manner — ran 2, only one ran, the other became not run." Fix: derive each case's status from the most recent run that CONTAINS that case (`latestResultOf(caseId, runs)` scans all runs newest-first), not from one global latest run. The header/metric cards still legitimately read `latestRunOf` (one coherent run snapshot) — only the per-row status/result needed the all-runs scan. (Separately: the case row now has `onClick={onEdit}` so clicking the row — not just the pencil — opens the editor; row-action buttons `stopPropagation`.)
+
+**Evidence:** this session (2026-07-13); `client/src/app/agents/[id]/_components/AgentEditor/_components/EvalsTab/helpers.ts` (`latestResultOf`), `EvalsTab.tsx` (`CaseRow` takes `runs`, clickable row), `EvalsTab.test.tsx` ("per-case status across separate single-case runs"); `server/src/modules/eval/service.ts:165` (`runCase` → `runCases(agent, [row])`).
+
+---
+
 ## 2026-07-10 — AgentEditor tabs have TWO sources of truth: adding to `TABS` renders the tab but a missing `VALID_TABS` entry makes it un-openable, and component tests can't catch it
 
 The editor tab bar is driven by `TABS` (`AgentEditor/constants.ts`), but the active tab is gated a SECOND time in the page: `const tab = VALID_TABS.includes(search.get("tab") ?? "") ? … : "config"` (`client/src/app/agents/[id]/page.tsx:15,27`). Add a tab to `TABS` only → the tab button renders and `setTab` pushes `?tab=<key>`, but the page reads it back through `VALID_TABS`, doesn't find the key, and falls back to `"config"` — so the new tab is visible yet **can never open** (URL flips to `?tab=evals`, content stays Config). `AgentEditor.test.tsx` passes `tab="evals"` as a prop directly, bypassing the page-level gate, so typecheck + unit tests stay green while the live app is broken. Only driving the real page (click the tab, observe it doesn't switch) surfaces it. When adding an editor tab, update BOTH `TABS` and `VALID_TABS`.

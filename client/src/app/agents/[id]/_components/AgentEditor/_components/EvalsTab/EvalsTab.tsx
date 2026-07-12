@@ -86,7 +86,7 @@ export function EvalsTab({ agentId }: { agentId: string }) {
           />
         ) : (
           caseList.map((c) => (
-            <CaseRow key={c.id} evalCase={c} latestRun={latestRun} onEdit={() => setEditingCase(c)} />
+            <CaseRow key={c.id} evalCase={c} runs={runs} onEdit={() => setEditingCase(c)} />
           ))
         )}
       </div>
@@ -98,18 +98,18 @@ export function EvalsTab({ agentId }: { agentId: string }) {
 
 function CaseRow({
   evalCase,
-  latestRun,
+  runs,
   onEdit,
 }: {
   evalCase: EvalCase;
-  latestRun: EvalRunRecord | undefined;
+  runs: EvalRunRecord[] | undefined;
   onEdit: () => void;
 }) {
   const runCase = useRunEvalCase();
   const deleteCase = useDeleteEvalCase();
 
-  const status = deriveCaseStatus(evalCase.id, latestRun);
-  const resultText = caseResultText(evalCase.id, latestRun);
+  const status = deriveCaseStatus(evalCase.id, runs);
+  const resultText = caseResultText(evalCase.id, runs);
   const badge = deriveCaseBadge(evalCase.expected_output);
 
   const handleRun = () => {
@@ -124,8 +124,23 @@ function CaseRow({
     }
   };
 
+  // Clicking the row opens the editor; the action buttons stop propagation so
+  // Run/Delete don't also trip the row's onClick.
+  const stop = (e: React.MouseEvent) => e.stopPropagation();
+
   return (
-    <div style={s.row}>
+    <div
+      style={s.row}
+      role="button"
+      tabIndex={0}
+      onClick={onEdit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onEdit();
+        }
+      }}
+    >
       <StatusIcon status={status} />
       <div style={s.rowMain}>
         <span style={s.rowName}>{evalCase.name}</span>
@@ -141,7 +156,7 @@ function CaseRow({
           <span style={s.emptyBadge}>[]</span>
         )}
       </div>
-      <div style={s.rowActions}>
+      <div style={s.rowActions} onClick={stop}>
         <IconBtn icon="Play" label={`Run ${evalCase.name}`} onClick={handleRun} />
         <IconBtn icon="Edit" label={`Edit ${evalCase.name}`} onClick={onEdit} />
         <IconBtn icon="Trash" label={`Delete ${evalCase.name}`} onClick={handleDelete} danger />

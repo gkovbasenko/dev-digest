@@ -15,6 +15,7 @@ import { OverviewTab } from "./_components/OverviewTab";
 import { FindingsTab } from "./_components/FindingsTab";
 import { DiffTab } from "./_components/DiffTab";
 import RunTraceDrawer from "./_components/RunTraceDrawer";
+import { RecentEvals } from "@/components/eval";
 import { usePullDetail, usePulls } from "../../../../../lib/hooks";
 import { useQueryClient } from "@tanstack/react-query";
 import { usePrReviews, useCancelRun, usePrActiveRuns, usePrRuns, useDeleteRun } from "../../../../../lib/hooks/reviews";
@@ -76,6 +77,16 @@ export default function PRDetailPage() {
   const lethalTrifecta = allFindings.filter((f) => f.kind === "lethal_trifecta");
   const findingsCount = allFindings.length;
 
+  // Agents that have reviewed this PR (deduped) — scopes the "recent evals"
+  // summary to agents relevant to this PR, not the whole workspace (AC-22).
+  const relevantAgents = React.useMemo(() => {
+    const byId = new Map<string, string>();
+    for (const r of runs) {
+      if (r.agent_id) byId.set(r.agent_id, r.agent_name ?? r.agent_id);
+    }
+    return Array.from(byId, ([id, name]) => ({ id, name }));
+  }, [reviews]);
+
   const repoName = activeRepo?.full_name ?? repoId;
   // The real "owner/repo" (null until the repo is loaded) — used to build
   // github.com deep-links for the header and finding file references.
@@ -135,13 +146,16 @@ export default function PRDetailPage() {
 
       <div style={{ padding: "24px 32px 44px", display: "flex", flexDirection: "column", gap: 24, maxWidth: 1080, margin: "0 auto" }}>
         {tab === "overview" && (
-          <OverviewTab
-            prId={prId}
-            prBody={pr.body}
-            repoId={repoId}
-            repoFullName={repoFullName}
-            headSha={pr.head_sha}
-          />
+          <>
+            <OverviewTab
+              prId={prId}
+              prBody={pr.body}
+              repoId={repoId}
+              repoFullName={repoFullName}
+              headSha={pr.head_sha}
+            />
+            <RecentEvals agents={relevantAgents} />
+          </>
         )}
 
         {tab === "findings" && (

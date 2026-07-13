@@ -8,6 +8,12 @@ vi.mock("../../../../../../../lib/hooks/reviews", () => ({
   useFindingAction: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
+// FindingCard (rendered by FindingsPanel) unconditionally calls
+// useCreateEvalCaseFromFinding — mock it so no QueryClientProvider is needed.
+vi.mock("@/lib/hooks/eval", () => ({
+  useCreateEvalCaseFromFinding: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+
 import { FindingsPanel } from "./FindingsPanel";
 
 afterEach(cleanup);

@@ -1,0 +1,183 @@
+/* EvalsTab — Agent editor "Evals" tab (T6, AC-5/AC-6). Lists every eval case
+   owned by the agent (status, expected/got, severity·category badge, run/edit/
+   delete), the aggregate RECALL/PRECISION/CITATION ACCURACY/TRACES PASSED cards,
+   and an "Eval cases X/Y passing" header — all sourced from the latest
+   `eval_runs` row (T3). Renders under `s.tabBody` (own header/list layout, not
+   `s.body` — client INSIGHTS 2026-07-01). Cases can be authored from scratch
+   here ("New eval case" → EvalCaseEditor create mode) or born from an accepted/
+   dismissed finding via T5's "Turn into eval case" on PR-detail. */
+"use client";
+
+import React from "react";
+import { Button, EmptyState, IconBtn, SeverityBadge, CategoryTag } from "@devdigest/ui";
+import type { EvalCase, EvalRunRecord } from "@devdigest/shared";
+import {
+  useAgentEvalCases,
+  useAgentEvalRuns,
+  useRunAgentEvals,
+  useRunEvalCase,
+  useDeleteEvalCase,
+} from "@/lib/hooks/eval";
+import { EvalCaseEditor, StatusIcon, EvalMetricCard } from "@/components/eval";
+import { caseResultText, deriveCaseBadge, deriveCaseStatus, latestRunOf } from "./helpers";
+import { s } from "./styles";
+
+export function EvalsTab({ agentId }: { agentId: string }) {
+  const { data: cases } = useAgentEvalCases(agentId);
+  const { data: runs } = useAgentEvalRuns(agentId);
+  const runAll = useRunAgentEvals();
+
+  const [editingCase, setEditingCase] = React.useState<EvalCase | null>(null);
+  const [creatingNew, setCreatingNew] = React.useState(false);
+
+  const caseList = React.useMemo(() => cases ?? [], [cases]);
+  const latestRun = React.useMemo(() => latestRunOf(runs), [runs]);
+  const total = caseList.length;
+
+  const headerLabel = latestRun
+    ? `Eval cases ${latestRun.traces_passed}/${latestRun.traces_total} passing`
+    : "Evals";
+
+  return (
+    <div style={s.wrap}>
+      <div style={s.header}>
+        <div style={s.titleRow}>
+          <h2 style={s.h2}>{headerLabel}</h2>
+          <div style={s.titleActions}>
+            <Button
+              kind="secondary"
+              icon="Play"
+              loading={runAll.isPending}
+              onClick={() => runAll.mutate(agentId)}
+              disabled={runAll.isPending || total === 0}
+            >
+              {runAll.isPending ? "Running…" : "Run all"}
+            </Button>
+            <Button kind="primary" icon="Plus" onClick={() => setCreatingNew(true)}>
+              New eval case
+            </Button>
+          </div>
+        </div>
+        <div style={s.metrics}>
+          <EvalMetricCard label="RECALL" value={latestRun?.recall ?? null} />
+          <EvalMetricCard label="PRECISION" value={latestRun?.precision ?? null} />
+          <EvalMetricCard label="CITATION ACCURACY" value={latestRun?.citation_accuracy ?? null} />
+          <EvalMetricCard
+            label="TRACES PASSED"
+            value={latestRun ? `${latestRun.traces_passed}/${latestRun.traces_total}` : null}
+            percent={false}
+          />
+        </div>
+      </div>
+
+      <div style={s.list}>
+        {total === 0 ? (
+          <EmptyState
+            icon="FlaskConical"
+            title="No eval cases yet"
+            body={
+              <>
+                Author one here, or create it from an accepted/dismissed finding on a pull request
+                review via “Turn into eval case.”
+              </>
+            }
+            cta="New eval case"
+            onCta={() => setCreatingNew(true)}
+          />
+        ) : (
+          caseList.map((c) => (
+            <CaseRow
+              key={c.id}
+              evalCase={c}
+              runs={runs}
+              batchRunning={runAll.isPending}
+              onEdit={() => setEditingCase(c)}
+            />
+          ))
+        )}
+      </div>
+
+      {editingCase && <EvalCaseEditor evalCase={editingCase} onClose={() => setEditingCase(null)} />}
+      {creatingNew && <EvalCaseEditor agentId={agentId} onClose={() => setCreatingNew(false)} />}
+    </div>
+  );
+}
+
+function CaseRow({
+  evalCase,
+  runs,
+  batchRunning,
+  onEdit,
+}: {
+  evalCase: EvalCase;
+  runs: EvalRunRecord[] | undefined;
+  batchRunning: boolean;
+  onEdit: () => void;
+}) {
+  const runCase = useRunEvalCase();
+  const deleteCase = useDeleteEvalCase();
+
+  // Runs are synchronous LLM calls with no SSE progress — surface the in-flight
+  // state on the row (spinner status + spinning Play) so a click gives feedback.
+  const running = runCase.isPending || batchRunning;
+  const status = running ? "running" : deriveCaseStatus(evalCase.id, runs);
+  const resultText = running ? "running…" : caseResultText(evalCase.id, runs);
+  const badge = deriveCaseBadge(evalCase.expected_output);
+
+  const handleRun = () => {
+    if (running) return;
+    runCase.mutate(evalCase.id);
+  };
+
+  const handleDelete = () => {
+    if (deleteCase.isPending) return;
+    if (window.confirm(`Delete eval case "${evalCase.name}"? This cannot be undone.`)) {
+      deleteCase.mutate(evalCase.id);
+    }
+  };
+
+  // Clicking the row opens the editor; the action buttons stop propagation so
+  // Run/Delete don't also trip the row's onClick.
+  const stop = (e: React.MouseEvent) => e.stopPropagation();
+
+  return (
+    <div
+      style={s.row}
+      role="button"
+      tabIndex={0}
+      onClick={onEdit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onEdit();
+        }
+      }}
+    >
+      <StatusIcon status={status} />
+      <div style={s.rowMain}>
+        <span style={s.rowName}>{evalCase.name}</span>
+        <span style={s.rowResult}>{resultText}</span>
+      </div>
+      <div style={s.rowBadge}>
+        {badge ? (
+          <>
+            <SeverityBadge severity={badge.severity} compact />
+            <CategoryTag category={badge.category} />
+          </>
+        ) : (
+          <span style={s.emptyBadge}>[]</span>
+        )}
+      </div>
+      <div style={s.rowActions} onClick={stop}>
+        <IconBtn
+          icon="Play"
+          label={running ? `Running ${evalCase.name}` : `Run ${evalCase.name}`}
+          loading={running}
+          onClick={handleRun}
+        />
+        <IconBtn icon="Edit" label={`Edit ${evalCase.name}`} onClick={onEdit} />
+        <IconBtn icon="Trash" label={`Delete ${evalCase.name}`} onClick={handleDelete} danger />
+      </div>
+    </div>
+  );
+}

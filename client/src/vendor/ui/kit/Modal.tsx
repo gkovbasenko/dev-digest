@@ -1,4 +1,5 @@
 import React from "react";
+import { createPortal } from "react-dom";
 import { IconBtn } from "../primitives";
 
 export function Modal({
@@ -16,7 +17,15 @@ export function Modal({
   children?: React.ReactNode;
   footer?: React.ReactNode;
 }) {
-  return (
+  // Portal to <body> so the fixed overlay escapes any transformed / stacked
+  // ancestor (e.g. a FindingCard deep in the review-runs list) — otherwise the
+  // backdrop is scoped to that ancestor's containing block and page content
+  // bleeds through the dialog. Mount-guarded to avoid SSR `document` access.
+  const [mounted, setMounted] = React.useState(false);
+  React.useEffect(() => setMounted(true), []);
+  if (!mounted) return null;
+
+  return createPortal(
     <div style={{ position: "fixed", inset: 0, display: "grid", placeItems: "center", zIndex: 50, padding: 28 }}>
       <div
         onClick={onClose}
@@ -64,6 +73,7 @@ export function Modal({
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

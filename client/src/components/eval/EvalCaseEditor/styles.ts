@@ -1,0 +1,60 @@
+import type React from "react";
+
+export const s = {
+  body: {
+    padding: 24,
+    display: "flex",
+    flexDirection: "column",
+    gap: 16,
+  } as React.CSSProperties,
+  inputPane: {
+    marginTop: 8,
+    maxHeight: 200,
+    overflow: "auto",
+    borderRadius: 7,
+    border: "1px solid var(--border)",
+    background: "var(--bg-surface)",
+  } as React.CSSProperties,
+  pre: {
+    margin: 0,
+    padding: "10px 12px",
+    fontSize: 12.5,
+    lineHeight: 1.55,
+    whiteSpace: "pre-wrap",
+    wordBreak: "break-word",
+    fontFamily: "var(--font-mono, monospace)",
+    color: "var(--text-secondary)",
+  } as React.CSSProperties,
+  validity: (valid: boolean): React.CSSProperties => ({
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
+    fontSize: 12,
+    fontWeight: 600,
+    color: valid ? "var(--ok)" : "var(--crit)",
+  }),
+  footer: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 16,
+  } as React.CSSProperties,
+  runOnSaveLabel: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    fontSize: 13,
+    color: "var(--text-secondary)",
+    cursor: "pointer",
+  } as React.CSSProperties,
+  resultStrip: (pass: boolean): React.CSSProperties => ({
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    padding: "10px 12px",
+    borderRadius: 7,
+    fontSize: 13,
+    background: pass ? "var(--ok-bg)" : "var(--crit-bg)",
+    color: pass ? "var(--ok)" : "var(--crit)",
+  }),
+} as const;

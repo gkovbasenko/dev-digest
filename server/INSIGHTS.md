@@ -5,6 +5,14 @@ Newest first. See `.claude/skills/engineering-insights/SKILL.md` for what belong
 
 ---
 
+## 2026-07-13 — Eval metrics are NOISY: the reviewer LLM is non-deterministic, so a single run on a small case set can't A/B a prompt change; and a synchronous whole-set run can hang past 600s
+
+Running an agent's eval set (`POST /agents/:id/eval-runs`) executes one live LLM call per case with no fixed seed, so `precision`/`recall` vary run-to-run for the SAME prompt+set. Measured on Test Quality Reviewer (`deepseek/deepseek-v4-flash` via openrouter, 9-case set): four consecutive runs of the IDENTICAL v1 prompt scored precision **0.750 / 0.571 / 0.429 / 0.500** (traces 7/7/5/6). That ±~0.15 band means a single before/after run pair cannot attribute a small prompt effect (e.g. a ~+0.1 precision "better" edit is inside the noise) — only a large effect (a deliberately-broken "flag everything" prompt) clears it. For a real sensitivity test either run each variant N times and compare medians, enlarge the case set, or pick a (more) deterministic model. Second gotcha: the run is a synchronous sequential batch (see the dismissed "sequential LLM calls" finding); a whole-set run CAN exceed a 600s client timeout under openrouter latency and leave NO row (the run only persists on completion) — drive it as trigger-then-poll-`eval_runs`, not one long blocking POST, and never leave an A/B script without a `finally` that restores the original prompt (a mid-script failure otherwise leaves the agent on the experimental prompt at a bumped version).
+
+**Evidence:** this session (2026-07-13); `eval_runs` rows for owner `1f4287fc-…` all `owner_version=1` with precision 0.75/0.571/0.429/0.5; the A/B driver's `POST /agents/:id/eval-runs` for the "better" prompt (agent left at v2) raised `TimeoutError: timed out` at the 600s urllib timeout with no v2 row written. `service.ts:330` (`reviewPullRequest` per case, no seed).
+
+---
+
 ## 2026-07-08 — `ContextService` is not on the DI container — construct it (`new ContextService(container)`) to read Project-Context specs
 
 Reading Project-Context specs/docs from another module uses `new ContextService(container)` (the `context/routes.ts` precedent), NOT a container getter — `ContextService` is a public class, its `ContextRepository` stays encapsulated, and `discover()`/`preview()` are already realpath-contained clone reads (so callers must NOT read the clone directly). Brief compute (`reviews/brief/compute.ts` `gatherSpecs`) is the 2nd such call site; wrap the whole read in try/catch → `[]` (best-effort, un-cloned repos throw). A 3rd consumer is the trigger to promote it to a lazy `container.context` getter (mirroring `repoIntel`), not a 3rd ad-hoc construction.

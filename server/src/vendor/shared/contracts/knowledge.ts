@@ -57,23 +57,30 @@ export const OnboardingDoc = z.object({
 export type OnboardingDoc = z.infer<typeof OnboardingDoc>;
 
 // ---- Eval ----
-export const EvalPerTrace = z.object({
+/** Per-case result folded into `EvalRun.case_results` / the `eval_runs.case_results` jsonb (AC-8/AC-9). */
+export const EvalCaseResult = z.object({
+  case_id: z.string(),
   name: z.string(),
   pass: z.boolean(),
-  expected: z.unknown(),
+  expected: z.number().int(),
+  got: z.number().int(),
+  recall: z.number().nullable(),
+  precision: z.number().nullable(),
+  cost_usd: z.number().nullable(),
+  duration_ms: z.number().int(),
   actual: z.unknown(),
 });
-export type EvalPerTrace = z.infer<typeof EvalPerTrace>;
+export type EvalCaseResult = z.infer<typeof EvalCaseResult>;
 
 export const EvalRun = z.object({
-  recall: z.number().min(0).max(1),
-  precision: z.number().min(0).max(1),
-  citation_accuracy: z.number().min(0).max(1),
+  recall: z.number().min(0).max(1).nullable(),
+  precision: z.number().min(0).max(1).nullable(),
+  citation_accuracy: z.number().min(0).max(1).nullable(),
   traces_passed: z.number().int(),
   traces_total: z.number().int(),
   duration_ms: z.number().int(),
   cost_usd: z.number().nullable(),
-  per_trace: z.array(EvalPerTrace),
+  case_results: z.array(EvalCaseResult),
 });
 export type EvalRun = z.infer<typeof EvalRun>;
 
@@ -90,6 +97,7 @@ export const EvalCase = z.object({
   input_meta: z.unknown(),
   expected_output: z.unknown(),
   notes: z.string().nullish(),
+  source_finding_id: z.string().nullish(),
 });
 export type EvalCase = z.infer<typeof EvalCase>;
 

@@ -1,3 +1,4 @@
+import { zipSync, strToU8 } from "fflate";
 import type { CiExportInputBody, CiFile } from "@devdigest/shared";
 import { DEFAULT_TRIGGERS } from "./constants";
 
@@ -21,22 +22,34 @@ export function initialWizardInput(): WizardInput {
   };
 }
 
-/** Trigger a browser download for one generated file — no zip library is
-    installed, so each file is offered as its own download rather than a
-    single archive; functionally equivalent for AC-11 ("let the user download
-    the returned files without requiring a PR"). */
-export function downloadFile(file: Pick<CiFile, "path" | "contents">) {
-  const blob = new Blob([file.contents], { type: "text/plain;charset=utf-8" });
+/** Build a real `.zip` (AC-11 "Copy files as a zip") preserving each file's
+    FULL repo-relative path (`.devdigest/agents/<slug>.yaml`,
+    `.github/workflows/devdigest-review.yml`, …) as its directory structure
+    inside the archive — flattening to basenames would silently drop the
+    `.devdigest/`/`.github/workflows/` layout the user needs to reproduce by
+    hand. Synchronous `zipSync` (fflate) is fine at this bundle's size (a few
+    small text files + the runner bundle, well under a browser-blocking
+    threshold). */
+export function buildZip(files: Pick<CiFile, "path" | "contents">[]): Uint8Array {
+  const entries: Record<string, Uint8Array> = {};
+  for (const f of files) entries[f.path] = strToU8(f.contents);
+  return zipSync(entries, { level: 6 });
+}
+
+/** Trigger a single browser download of the bundle as one `.zip` archive. */
+export function downloadFiles(files: Pick<CiFile, "path" | "contents">[]) {
+  const zipped = buildZip(files);
+  // `zipped.buffer` is typed `ArrayBufferLike` (could be a `SharedArrayBuffer`
+  // per lib.dom); `Blob` wants a concrete `ArrayBuffer`-backed view — slicing
+  // into a fresh `Uint8Array` normalizes the type without a real copy cost at
+  // this bundle's size.
+  const blob = new Blob([zipped.slice()], { type: "application/zip" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = file.path.split("/").pop() || file.path;
+  a.download = "devdigest-ci.zip";
   document.body.appendChild(a);
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
-}
-
-export function downloadFiles(files: Pick<CiFile, "path" | "contents">[]) {
-  for (const f of files) downloadFile(f);
 }

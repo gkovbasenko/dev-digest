@@ -39,3 +39,11 @@ export function formatSignedDelta(value: number | null | undefined): string {
   const sign = value > 0 ? "+" : "";
   return `${sign}${value.toFixed(2)}`;
 }
+
+/** Absolute percentage-point delta for a 0..1 metric delta ("4pt"), for the
+    Compare tiles. Sign/arrow are supplied separately by the caller so it can
+    color by direction. `null` → "—". */
+export function formatPoints(delta: number | null | undefined): string {
+  if (delta == null) return "—";
+  return `${Math.abs(Math.round(delta * 100))}pt`;
+}

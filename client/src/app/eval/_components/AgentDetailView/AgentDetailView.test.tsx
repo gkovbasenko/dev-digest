@@ -7,6 +7,12 @@ vi.mock("@/lib/hooks/eval", () => ({
   useRunAgentEvals: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue(undefined), isPending: false }),
 }));
 
+// CompareView (rendered as an overlay when Compare is clicked) reads these.
+vi.mock("@/lib/hooks/agents", () => ({
+  useAgentVersion: () => ({ data: undefined, isError: false }),
+  useUpdateAgent: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+
 afterEach(cleanup);
 
 const TREND = [
@@ -105,16 +111,17 @@ describe("AgentDetailView (AC-16/AC-17/AC-19)", () => {
     expect(compareBtn).toBeDisabled(); // 3 selected
   });
 
-  it("opens the compare view (side-by-side, no re-run) when Compare is clicked with exactly two selected", () => {
+  it("opens the compare modal (no re-run) over the detail view when Compare is clicked with exactly two selected", () => {
     render(
       <AgentDetailView agentId="ag-1" agentName="Security Reviewer" dashboard={DASHBOARD} runs={RUNS} onBack={vi.fn()} />,
     );
     const checkboxes = screen.getAllByRole("checkbox");
-    fireEvent.click(checkboxes[0]!);
-    fireEvent.click(checkboxes[1]!);
+    fireEvent.click(checkboxes[0]!); // run-1 (v3)
+    fireEvent.click(checkboxes[1]!); // run-2 (v2)
     fireEvent.click(screen.getByRole("button", { name: /Compare/ }));
 
-    expect(screen.getByText("Compare runs · Security Reviewer")).toBeInTheDocument();
-    expect(screen.queryByText("Metric trend")).not.toBeInTheDocument();
+    // Version-titled modal, and the detail view stays mounted underneath (overlay).
+    expect(screen.getByText("Compare runs · v3 → v2")).toBeInTheDocument();
+    expect(screen.getByText("Metric trend")).toBeInTheDocument();
   });
 });

@@ -1,8 +1,8 @@
 /* AgentDetailView — Eval Dashboard agent-detail (AC-16/AC-17/AC-18/AC-19):
    metric cards with delta vs previous run + sparkline, a METRIC TREND
    LineChart, and a RECENT RUNS table whose Checkbox selection drives
-   Compare (enabled only for exactly two selected runs). Compare replaces
-   this view's body with the side-by-side CompareView — no re-run POST. */
+   Compare (enabled only for exactly two selected runs). Compare opens the
+   CompareView modal over this view — no re-run POST. */
 "use client";
 
 import React from "react";
@@ -40,17 +40,6 @@ export function AgentDetailView({
     .map((id) => runs.find((r) => r.id === id))
     .filter((r): r is EvalRunRecord => r != null);
   const compareDisabled = selectedIds.length !== 2;
-
-  if (compareOpen && selectedRuns.length === 2) {
-    return (
-      <CompareView
-        a={selectedRuns[0]!}
-        b={selectedRuns[1]!}
-        agentName={agentName}
-        onClose={() => setCompareOpen(false)}
-      />
-    );
-  }
 
   const { current, delta, trend } = dashboard;
 
@@ -154,6 +143,10 @@ export function AgentDetailView({
         </div>
         <AgentRunsTable agentId={agentId} runs={runs} selectedIds={selectedIds} onToggle={toggleRun} />
       </div>
+
+      {compareOpen && selectedRuns.length === 2 && (
+        <CompareView a={selectedRuns[0]!} b={selectedRuns[1]!} onClose={() => setCompareOpen(false)} />
+      )}
     </div>
   );
 }

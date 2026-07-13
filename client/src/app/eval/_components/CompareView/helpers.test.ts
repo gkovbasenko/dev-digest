@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { EvalRunRecord } from "@devdigest/shared";
-import { computeCompare } from "./helpers";
+import { computeCompare, diffLines } from "./helpers";
 
 /** Minimal EvalRunRecord fixture — only the metric fields matter to computeCompare. */
 function run(over: Partial<EvalRunRecord> = {}): EvalRunRecord {
@@ -52,5 +52,38 @@ describe("computeCompare", () => {
     const cmp = computeCompare(a, b);
     expect(cmp.a).toBe(a);
     expect(cmp.b).toBe(b);
+  });
+});
+
+describe("diffLines", () => {
+  it("marks unchanged lines 'same'", () => {
+    const d = diffLines("a\nb\nc", "a\nb\nc");
+    expect(d.map((l) => l.type)).toEqual(["same", "same", "same"]);
+  });
+
+  it("marks an inserted line 'add' and keeps the surrounding lines 'same'", () => {
+    const d = diffLines("line 1\nline 3", "line 1\nline 2\nline 3");
+    expect(d).toEqual([
+      { type: "same", text: "line 1" },
+      { type: "add", text: "line 2" },
+      { type: "same", text: "line 3" },
+    ]);
+  });
+
+  it("marks a removed line 'del'", () => {
+    const d = diffLines("keep\ndrop\nkeep2", "keep\nkeep2");
+    expect(d).toEqual([
+      { type: "same", text: "keep" },
+      { type: "del", text: "drop" },
+      { type: "same", text: "keep2" },
+    ]);
+  });
+
+  it("represents a replaced line as a del followed by an add", () => {
+    const d = diffLines("old", "new");
+    expect(d).toEqual([
+      { type: "del", text: "old" },
+      { type: "add", text: "new" },
+    ]);
   });
 });

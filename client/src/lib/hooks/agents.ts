@@ -3,7 +3,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api";
-import type { Agent, ModelInfo, Provider, ReviewStrategy } from "@devdigest/shared";
+import type { Agent, AgentVersion, ModelInfo, Provider, ReviewStrategy } from "@devdigest/shared";
 
 export function useAgents() {
   return useQuery({
@@ -17,6 +17,16 @@ export function useAgent(id: string | null | undefined) {
     queryKey: ["agent", id],
     queryFn: () => api.get<Agent>(`/agents/${id}`),
     enabled: !!id,
+  });
+}
+
+/** `GET /agents/:id/versions/:version` — one config snapshot (system prompt +
+    model + strategy at that version). Powers the Compare-runs prompt diff. */
+export function useAgentVersion(agentId: string | null | undefined, version: number | null | undefined) {
+  return useQuery({
+    queryKey: ["agent-version", agentId, version],
+    queryFn: () => api.get<AgentVersion>(`/agents/${agentId}/versions/${version}`),
+    enabled: !!agentId && version != null,
   });
 }
 

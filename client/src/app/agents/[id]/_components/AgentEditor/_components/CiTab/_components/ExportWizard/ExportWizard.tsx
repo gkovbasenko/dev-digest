@@ -156,6 +156,7 @@ export function ExportWizard({ agent, onClose }: { agent: Agent; onClose: () => 
             files={files}
             loading={exportCi.isPending && !files}
             error={exportCi.isError}
+            errorMessage={(exportCi.error as Error | null)?.message}
             onEditWorkflow={updateFileContents}
           />
         )}
@@ -173,6 +174,7 @@ export function ExportWizard({ agent, onClose }: { agent: Agent; onClose: () => 
             filesDownloaded={filesDownloaded}
             pending={exportCi.isPending}
             error={exportCi.isError}
+            errorMessage={(exportCi.error as Error | null)?.message}
           />
         )}
       </div>
@@ -253,16 +255,18 @@ function PreviewStep({
   files,
   loading,
   error,
+  errorMessage,
   onEditWorkflow,
 }: {
   t: ReturnType<typeof useTranslations>;
   files: CiFile[] | null;
   loading: boolean;
   error: boolean;
+  errorMessage?: string;
   onEditWorkflow: (path: string, contents: string) => void;
 }) {
   if (loading) return <div style={s.hint}>{t("exportWizard.generating")}</div>;
-  if (error) return <div style={s.error}>{t("exportWizard.previewError")}</div>;
+  if (error) return <div style={s.error}>{errorMessage ?? t("exportWizard.previewError")}</div>;
   if (!files || files.length === 0) return <div style={s.hint}>{t("exportWizard.generating")}</div>;
 
   const workflow = files.find((f) => isWorkflowFile(f.path));
@@ -388,6 +392,7 @@ function InstallStep({
   filesDownloaded,
   pending,
   error,
+  errorMessage,
 }: {
   t: ReturnType<typeof useTranslations>;
   action: "open_pr" | "files";
@@ -398,6 +403,7 @@ function InstallStep({
   filesDownloaded: boolean;
   pending: boolean;
   error: boolean;
+  errorMessage?: string;
 }) {
   if (result) {
     return (
@@ -447,7 +453,7 @@ function InstallStep({
           </span>
         </label>
       </div>
-      {error && <div style={s.error}>{t("exportWizard.installError")}</div>}
+      {error && <div style={s.error}>{errorMessage ?? t("exportWizard.installError")}</div>}
     </>
   );
 }

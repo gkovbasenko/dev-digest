@@ -155,6 +155,13 @@
       "when": 1783895659297,
       "tag": "0021_lovely_cable",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1783970223040,
+      "tag": "0022_common_dragon_lord",
+      "breakpoints": true
     }
   ]
 }

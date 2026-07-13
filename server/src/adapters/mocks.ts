@@ -31,6 +31,7 @@ import type {
   AuthWorkspace,
   SecretsProvider,
   SecretKey,
+  WorkflowRun,
 } from '@devdigest/shared';
 import { parseUnifiedDiff } from './git/diff-parser.js';
 
@@ -125,6 +126,15 @@ export interface MockGitHubOptions {
   login?: string;
   /** Existing inline review comments returned by listReviewComments. */
   comments?: PrReviewComment[];
+  /** Canned workflow runs returned by `listWorkflowRuns` (most recent first). */
+  workflowRuns?: WorkflowRun[];
+  /**
+   * Canned artifact contents returned by `downloadArtifact`, keyed by run id
+   * then artifact name. Missing entry (or a missing run id) → null ("no such
+   * artifact"). A malformed-JSON string value lets ingest tests exercise the
+   * `CiResultArtifact.safeParse`-gating / skip-with-log path.
+   */
+  artifacts?: Record<number, Record<string, string | null>>;
 }
 
 export class MockGitHubClient implements GitHubClient {
@@ -132,6 +142,8 @@ export class MockGitHubClient implements GitHubClient {
   public openedPrs: OpenPrPayload[] = [];
   public committed: CommitFilesPayload[] = [];
   public createdComments: CreateReviewCommentInput[] = [];
+  public listedWorkflowRuns: { repo: RepoRef; workflowFile: string }[] = [];
+  public downloadedArtifacts: { repo: RepoRef; runId: number; artifactName: string }[] = [];
 
   constructor(private opts: MockGitHubOptions = {}) {}
 
@@ -236,6 +248,32 @@ export class MockGitHubClient implements GitHubClient {
 
   async currentLogin(): Promise<string> {
     return this.opts.login ?? 'mock-user';
+  }
+
+  async listWorkflowRuns(repo: RepoRef, workflowFile: string): Promise<WorkflowRun[]> {
+    this.listedWorkflowRuns.push({ repo, workflowFile });
+    return (
+      this.opts.workflowRuns ?? [
+        {
+          id: 1001,
+          status: 'completed',
+          conclusion: 'success',
+          prNumber: 482,
+          htmlUrl: 'https://github.com/mock/mock/actions/runs/1001',
+        },
+      ]
+    );
+  }
+
+  async downloadArtifact(
+    repo: RepoRef,
+    runId: number,
+    artifactName: string,
+  ): Promise<string | null> {
+    this.downloadedArtifacts.push({ repo, runId, artifactName });
+    const forRun = this.opts.artifacts?.[runId];
+    if (forRun && artifactName in forRun) return forRun[artifactName] ?? null;
+    return null;
   }
 }
 

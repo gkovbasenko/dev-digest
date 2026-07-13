@@ -12,4 +12,5 @@ export const TABS: readonly EditorTab[] = [
   { key: "skills", labelKey: "editor.tabs.skills", icon: "BookOpen" },
   { key: "context", labelKey: "editor.tabs.context", icon: "Folder" },
   { key: "evals", labelKey: "editor.tabs.evals", icon: "FlaskConical" },
+  { key: "ci", labelKey: "editor.tabs.ci", icon: "Workflow" },
 ];

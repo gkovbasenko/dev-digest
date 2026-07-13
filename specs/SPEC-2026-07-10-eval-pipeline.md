@@ -271,11 +271,15 @@ Capability 5 — history, dashboard, and compare
 - **AC-17** — WHILE exactly two runs are selected in the RECENT RUNS table, the system shall enable a
   "Compare" action; WHEN fewer than two or more than two are selected, Compare shall be disabled.
   - Verify: RTL test — select 1 → Compare disabled; select 2 → enabled; select 3 → disabled.
-- **AC-18** — WHEN two runs are compared, the system shall present their recall / precision /
-  citation_accuracy / pass-count side by side with the per-metric delta (old vs new), using the two
-  `eval_runs` rows' persisted aggregates (no re-run).
-  - Verify: RTL test — compare v6 (recall .78) vs v7 (recall .82) shows both values and "+0.04"; no
-    network POST to eval-runs is fired.
+- **AC-18** — WHEN two runs are compared, the system shall present a modal showing their recall /
+  precision / citation_accuracy / cost as old→new metric tiles with the per-metric point-delta, plus
+  a System Prompt Diff of the two `owner_version`s and a "Promote v{b}" action; metric values use the
+  two `eval_runs` rows' persisted aggregates (no re-run). The prompt diff and Promote reuse the
+  existing `GET /agents/:id/versions/:version` and `PUT /agents/:id` endpoints, and shall degrade
+  gracefully (diff shows "unavailable", Promote disabled) when a version snapshot 404s.
+  - Verify: RTL test — compare v2 (recall .70) vs v3 (recall .85) shows both values and a "15pt"
+    delta; the prompt diff highlights the added line; "Promote v3" restores version B's config via the
+    update mutation; no network POST to eval-runs is fired.
 - **AC-19** — WHERE the latest run's precision dropped versus the previous run, the agent-detail
   view shall render the `EvalDashboard.alert` banner text describing the regression (e.g. precision
   dipped, a new false positive slipped in); WHERE no regression, no banner shall render.

@@ -97,13 +97,14 @@ const AGENT: Agent = {
 describe("BundleSkillModal", () => {
   it("prefills name/description/body from the bundle result on mount", () => {
     bundleImmediately();
-    const { container } = render(<BundleSkillModal repoId="repo1" onClose={() => {}} />);
+    render(<BundleSkillModal repoId="repo1" onClose={() => {}} />);
 
     expect(mockBundleMutate).toHaveBeenCalled();
     expect(screen.getByDisplayValue("repo-conventions")).toBeInTheDocument();
     // getByDisplayValue normalizes whitespace by default, collapsing this
     // multi-line body to one line — check the textarea's raw value instead.
-    expect(container.querySelector("textarea")?.value).toBe(BUNDLE_RESULT.body);
+    // Modal portals to document.body, so query the document, not the render container.
+    expect(document.querySelector("textarea")?.value).toBe(BUNDLE_RESULT.body);
   });
 
   it("closes the modal when the bundle fetch fails (nothing recoverable in a blank form; the global toast covers the message)", () => {
@@ -233,8 +234,9 @@ describe("BundleSkillModal", () => {
     // isPending true + no bundleImmediately() call (never resolves) — this is
     // the actual loadingBundle branch, not just "fields happen to be empty".
     mockBundlePending.current = true;
-    const { container } = render(<BundleSkillModal repoId="repo1" onClose={() => {}} />);
-    expect(container.querySelectorAll(".skeleton").length).toBeGreaterThan(0);
+    render(<BundleSkillModal repoId="repo1" onClose={() => {}} />);
+    // Modal portals to document.body, so query the document, not the render container.
+    expect(document.querySelectorAll(".skeleton").length).toBeGreaterThan(0);
     expect(screen.queryByPlaceholderText("repo-conventions")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Create skill" })).toBeDisabled();
   });
@@ -254,8 +256,9 @@ describe("BundleSkillModal", () => {
 
   it("disables Create skill when the body textarea is manually cleared", () => {
     bundleImmediately();
-    const { container } = render(<BundleSkillModal repoId="repo1" onClose={() => {}} />);
-    const textarea = container.querySelector("textarea")!;
+    render(<BundleSkillModal repoId="repo1" onClose={() => {}} />);
+    // Modal portals to document.body, so query the document, not the render container.
+    const textarea = document.querySelector("textarea")!;
     fireEvent.change(textarea, { target: { value: "   " } }); // whitespace-only
     expect(screen.getByRole("button", { name: "Create skill" })).toBeDisabled();
   });

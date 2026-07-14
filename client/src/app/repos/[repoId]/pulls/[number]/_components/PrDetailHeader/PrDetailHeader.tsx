@@ -3,6 +3,7 @@
 import React, { useCallback } from "react";
 import { Icon, Avatar, Badge, Button, Tabs } from "@devdigest/ui";
 import { RunReviewDropdown } from "../RunReviewDropdown";
+import { MultiAgentPicker } from "../MultiAgentPicker";
 import { s } from "./styles";
 import type { PrDetail } from "@/lib/types";
 
@@ -90,12 +91,19 @@ export function PrDetailHeader({
             View on GitHub
           </Button>
           {prId && (
-            <RunReviewDropdown
-              prId={prId}
-              warnMerged={pr.status === "merged" || pr.status === "closed"}
-              onRunStart={handleRunStart}
-              onRunsStarted={handleRunsStarted}
-            />
+            <>
+              <MultiAgentPicker
+                prId={prId}
+                onRunStart={handleRunStart}
+                onRunsStarted={handleRunsStarted}
+              />
+              <RunReviewDropdown
+                prId={prId}
+                warnMerged={pr.status === "merged" || pr.status === "closed"}
+                onRunStart={handleRunStart}
+                onRunsStarted={handleRunsStarted}
+              />
+            </>
           )}
         </div>
       </div>

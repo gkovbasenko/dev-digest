@@ -1,11 +1,21 @@
 {
   "viewTrace": "View trace",
+  "picker": {
+    "trigger": "Pick agents to run",
+    "confirm": "Run multi-agent review ({count})",
+    "noEnabledAgents": "No enabled agents — enable one in Agents settings."
+  },
   "finding": {
     "trifecta": "trifecta"
   },
   "column": {
     "noFindings": "No findings.",
-    "findingsCount": "{count, plural, one {# finding} other {# findings}}"
+    "findingsCount": "{count, plural, one {# finding} other {# findings}}",
+    "status": {
+      "running": "Running…",
+      "done": "Done",
+      "failed": "Errored"
+    }
   },
   "conflicts": {
     "title": "Where agents disagree",
@@ -14,7 +24,9 @@
     "didNotFlag": "did not flag"
   },
   "tabs": {
-    "noSummary": "No summary."
+    "noSummary": "No summary.",
+    "selectFinding": "Select a finding to see its detail.",
+    "loadingDetail": "Loading finding detail…"
   },
   "trace": {
     "configuration": "Configuration",
@@ -114,9 +126,9 @@
       "columns": "columns",
       "tabs": "tabs"
     },
-    "runAll": "Run all agents",
+    "runAll": "Run multi-agent review ({count})",
     "running": "Running…",
-    "meta": "{count} agents · fan-out via p-queue · {duration}s total · {cost}",
+    "meta": "{count} agents · {duration} total · {cost} · parallel fan-out",
     "noAgents": {
       "title": "Enable agents to run reviews",
       "body": "Multi-agent review runs the PR through every enabled agent in parallel. You have no agents enabled yet.",
@@ -124,10 +136,13 @@
     },
     "noRun": {
       "title": "No multi-agent run yet",
-      "bodyReady": "Run all enabled agents on this PR to see N columns + conflicts.",
+      "bodyReady": "Choose agents above and run them to see columns + conflicts.",
       "bodySelect": "Select a PR to begin.",
       "cta": "Run all agents"
     },
-    "crumb": "Multi-Agent Review"
+    "crumb": "Multi-Agent Review",
+    "pickPr": "Pick a pull request first",
+    "step1": "1 · Select a pull request",
+    "step2": "2 · Choose agents"
   }
 }

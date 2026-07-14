@@ -1,5 +1,6 @@
 import type { Container } from '../../platform/container.js';
 import {
+  MultiAgentRun,
   PrHistory,
   RiskBrief as RiskBriefSchema,
   type BriefRead,
@@ -11,7 +12,7 @@ import {
   type SmartDiffResponse,
 } from '@devdigest/shared';
 import { AppError, NotFoundError, ValidationError } from '../../platform/errors.js';
-import type { AgentRow } from '../../db/rows.js';
+import type { AgentRow, FindingRow } from '../../db/rows.js';
 import { ReviewRepository } from './repository.js';
 import { type ReviewDto, type ReviewDtoFinding } from './helpers.js';
 import { ReviewRunExecutor, type Logger } from './run-executor.js';
@@ -23,6 +24,7 @@ import { groundBrief } from './brief/ground.js';
 import { composeSmartDiff } from './smart-diff/compose.js';
 import { toPrBlastResponse } from './blast/map.js';
 import { groupPriorPrRows } from './prior-prs/map.js';
+import { assembleMultiAgentRun } from './multi-agent/assemble.js';
 
 /** Cap on "prior PRs touching these files" results — an unbounded overlap
  *  query on a busy repo would be a footgun (server INSIGHTS/plan gotcha). */
@@ -159,6 +161,132 @@ export class ReviewService {
 
   private publish(runId: string, kind: RunEventKind, msg: string, data?: unknown) {
     return this.container.runBus.publish(runId, kind, msg, data);
+  }
+
+  // ===========================================================================
+  // Multi-agent run (grouping): trigger a fan-out group + read the latest one.
+  // ===========================================================================
+
+  /**
+   * Trigger a fan-out review across `agentIds`: creates ONE `multi_agent_runs`
+   * group row and N linked `agent_runs` rows (one per requested agent), then
+   * fires the SAME bounded-concurrency executor used by the legacy single/all
+   * trigger, fire-and-forget. Returns every agent's `run_id` immediately
+   * (AC-18), before any review is persisted.
+   *
+   * Validation (AC-4): `agentIds` is checked against `listEnabled(workspaceId)`
+   * — this single intersection catches "empty", "unknown id", "not in this
+   * workspace", and "disabled" all at once. The group + agent_runs rows are
+   * created ONLY after every id passes, so an invalid request creates zero
+   * rows in `multi_agent_runs`/`agent_runs`/`reviews`.
+   */
+  async triggerMultiAgentRun(
+    workspaceId: string,
+    prId: string,
+    agentIds: string[],
+    logger?: Logger,
+  ): Promise<{
+    multi_agent_run_id: string;
+    pr_id: string;
+    runs: { run_id: string; agent_id: string; agent_name: string }[];
+  }> {
+    if (agentIds.length === 0) throw new ValidationError('Provide at least one agentId');
+    if (new Set(agentIds).size !== agentIds.length) {
+      throw new ValidationError('agentIds must not contain duplicates');
+    }
+
+    const pull = await this.repo.getPull(workspaceId, prId);
+    if (!pull) throw new NotFoundError('Pull request not found');
+    const repo = await this.repo.getRepo(pull.repoId);
+    if (!repo) throw new NotFoundError('Repo not found');
+
+    const enabled = await this.agents.listEnabled(workspaceId);
+    const enabledById = new Map(enabled.map((a) => [a.id, a]));
+    const targets: AgentRow[] = [];
+    for (const id of agentIds) {
+      const agent = enabledById.get(id);
+      if (!agent) {
+        throw new ValidationError(
+          `Agent ${id} is not an enabled agent in this workspace`,
+        );
+      }
+      targets.push(agent);
+    }
+
+    const group = await this.repo.createMultiAgentRun(workspaceId, prId);
+
+    const runs: { run_id: string; agent_id: string; agent_name: string }[] = [];
+    const jobs: { agent: AgentRow; runId: string }[] = [];
+    for (const agent of targets) {
+      const runId = await this.repo.createAgentRun({
+        workspaceId,
+        agentId: agent.id,
+        prId,
+        provider: agent.provider,
+        model: agent.model,
+        multiAgentRunId: group.id,
+      });
+      runs.push({ run_id: runId, agent_id: agent.id, agent_name: agent.name });
+      jobs.push({ agent, runId });
+    }
+
+    // Fire-and-forget, same pattern as `runReview`; one summary log line when
+    // the whole group finishes (Observability spec — `multi_agent_run.complete`).
+    const startedAt = Date.now();
+    void this.executor
+      .executeRuns(workspaceId, pull, repo, jobs, logger)
+      .then(() => {
+        // eslint-disable-next-line no-console
+        console.log(
+          JSON.stringify({
+            event: 'multi_agent_run.complete',
+            multiAgentRunId: group.id,
+            prId,
+            agentCount: jobs.length,
+            durationMs: Date.now() - startedAt,
+          }),
+        );
+      })
+      .catch((err) => {
+        logger?.error(
+          { prId, multiAgentRunId: group.id, err: (err as Error).message },
+          'multi-agent: background execution crashed',
+        );
+      });
+
+    return { multi_agent_run_id: group.id, pr_id: prId, runs };
+  }
+
+  /**
+   * The latest multi-agent-run group for a PR, shaped as `MultiAgentRun`
+   * (columns + conflicts + null-safe cost/duration rollups) — `null` when the
+   * PR has never had a multi-agent run (AC-13's "documented empty/absent
+   * response", mirroring the existing `getIntent` null-read convention).
+   * Findings are scoped to THIS group's own runs, never a PR-wide or
+   * latest-review-only read (server INSIGHTS 2026-06-30).
+   */
+  async getMultiAgentRun(workspaceId: string, prId: string): Promise<MultiAgentRun | null> {
+    const pull = await this.repo.getPull(workspaceId, prId);
+    if (!pull) throw new NotFoundError('Pull request not found');
+
+    const group = await this.repo.getLatestMultiAgentRun(workspaceId, prId);
+    if (!group) return null;
+
+    const runs = await this.repo.getRunsForGroup(group.id);
+    const reviewIds = runs
+      .map((r) => r.reviewId)
+      .filter((id): id is string => id !== null);
+    const findings = await this.repo.getFindingsForReviews(reviewIds);
+
+    const findingsByReviewId = new Map<string, FindingRow[]>();
+    for (const f of findings) {
+      const arr = findingsByReviewId.get(f.reviewId) ?? [];
+      arr.push(f);
+      findingsByReviewId.set(f.reviewId, arr);
+    }
+
+    const assembled = assembleMultiAgentRun(group, pull.number, runs, findingsByReviewId);
+    return MultiAgentRun.parse(assembled);
   }
 
   // ===========================================================================

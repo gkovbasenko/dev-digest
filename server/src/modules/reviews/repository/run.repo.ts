@@ -112,7 +112,9 @@ export async function reapStaleRunningRuns(db: Db): Promise<number> {
 
 // ---- observability: agent_runs + run_traces -------------------------------
 
-/** Create an agent_runs row in `running` state; returns its id (= the runId). */
+/** Create an agent_runs row in `running` state; returns its id (= the runId).
+ *  `multiAgentRunId` links this run to a multi-agent-run group (T6); omitted
+ *  (→ null) for legacy single/all-agent runs. */
 export async function createAgentRun(
   db: Db,
   values: {
@@ -121,6 +123,7 @@ export async function createAgentRun(
     prId: string;
     provider: string | null;
     model: string | null;
+    multiAgentRunId?: string;
   },
 ): Promise<string> {
   const [row] = await db
@@ -133,6 +136,7 @@ export async function createAgentRun(
       model: values.model,
       status: 'running',
       source: 'local',
+      multiAgentRunId: values.multiAgentRunId ?? null,
     })
     .returning({ id: t.agentRuns.id });
   return row!.id;

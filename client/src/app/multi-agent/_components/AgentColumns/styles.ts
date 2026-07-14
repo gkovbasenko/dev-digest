@@ -1,0 +1,50 @@
+import type { CSSProperties } from "react";
+
+export const s = {
+  grid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+    gap: 14,
+    alignItems: "start",
+  } satisfies CSSProperties,
+  column: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 10,
+    border: "1px solid var(--border)",
+    borderRadius: 8,
+    background: "var(--bg-elevated)",
+    padding: 14,
+    minWidth: 0,
+  } satisfies CSSProperties,
+  header: { display: "flex", flexDirection: "column", gap: 8 } satisfies CSSProperties,
+  nameRow: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  } satisfies CSSProperties,
+  name: {
+    fontSize: 14,
+    fontWeight: 600,
+    color: "var(--text-primary)",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+    minWidth: 0,
+  } satisfies CSSProperties,
+  metaRow: { display: "flex", alignItems: "center", gap: 10 } satisfies CSSProperties,
+  metaText: { fontSize: 12.5, color: "var(--text-secondary)" } satisfies CSSProperties,
+  findings: { display: "flex", flexDirection: "column", gap: 6, borderTop: "1px solid var(--border)", paddingTop: 10 } satisfies CSSProperties,
+  findingRow: { display: "flex", alignItems: "center", gap: 8 } satisfies CSSProperties,
+  findingTitle: {
+    fontSize: 13,
+    color: "var(--text-primary)",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+    minWidth: 0,
+  } satisfies CSSProperties,
+  empty: { fontSize: 13, color: "var(--text-muted)" } satisfies CSSProperties,
+  count: { fontSize: 12, color: "var(--text-muted)", marginTop: 4 } satisfies CSSProperties,
+} as const;

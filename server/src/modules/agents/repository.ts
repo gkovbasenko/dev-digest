@@ -1,4 +1,4 @@
-import { and, asc, desc, eq } from 'drizzle-orm';
+import { and, asc, count, desc, eq } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 import type { CiFailOn, Provider, ReviewStrategy } from '@devdigest/shared';
@@ -46,6 +46,14 @@ export interface UpdateAgent {
 export interface LinkedSkillRow {
   skill: typeof t.skills.$inferSelect;
   order: number;
+}
+
+/** The columns needed to derive per-run cost/latency for a completed ('done') run. */
+export interface DoneRunMetric {
+  model: string | null;
+  tokensIn: number | null;
+  tokensOut: number | null;
+  durationMs: number | null;
 }
 
 export class AgentsRepository {
@@ -265,5 +273,39 @@ export class AgentsRepository {
       .from(t.repos)
       .where(and(eq(t.repos.workspaceId, workspaceId), eq(t.repos.id, repoId)));
     return row?.clonePath ?? null;
+  }
+
+  // ---- agent_runs stats (T5 — minimal AgentStats subset) ------------------
+
+  /** Total run count for an agent, regardless of status. */
+  async countRuns(workspaceId: string, agentId: string): Promise<number> {
+    const [row] = await this.db
+      .select({ count: count() })
+      .from(t.agentRuns)
+      .where(and(eq(t.agentRuns.workspaceId, workspaceId), eq(t.agentRuns.agentId, agentId)));
+    return row?.count ?? 0;
+  }
+
+  /**
+   * Model/token/duration columns for this agent's completed ('done') runs only —
+   * cost and latency are derived from these at the service layer (agent_runs has
+   * no cost_usd column; see server INSIGHTS 2026-06-29).
+   */
+  async getDoneRunMetrics(workspaceId: string, agentId: string): Promise<DoneRunMetric[]> {
+    return this.db
+      .select({
+        model: t.agentRuns.model,
+        tokensIn: t.agentRuns.tokensIn,
+        tokensOut: t.agentRuns.tokensOut,
+        durationMs: t.agentRuns.durationMs,
+      })
+      .from(t.agentRuns)
+      .where(
+        and(
+          eq(t.agentRuns.workspaceId, workspaceId),
+          eq(t.agentRuns.agentId, agentId),
+          eq(t.agentRuns.status, 'done'),
+        ),
+      );
   }
 }

@@ -20,6 +20,13 @@ export class RunCancelledError extends Error {
   }
 }
 
+/**
+ * Default bounded-concurrency limit for `executeRuns`' per-agent worker pool.
+ * Caps both wall-clock parallelism and simultaneous provider load (spec
+ * Decisions). Override per-call via the `concurrency` param (e.g. tests).
+ */
+export const DEFAULT_MULTI_AGENT_CONCURRENCY = 4;
+
 /** Minimal structured logger (pino-compatible: (obj, msg)) for runtime logs. */
 export type Logger = {
   info: (obj: unknown, msg?: string) => void;
@@ -61,6 +68,13 @@ export class ReviewRunExecutor {
     repo: typeof schema.repos.$inferSelect,
     jobs: { agent: AgentRow; runId: string }[],
     logger?: Logger,
+    /**
+     * Bounded-concurrency limit — at most this many agents run at once; the
+     * next queued job starts the instant a slot frees up. Per-agent isolation
+     * (below) is unaffected: one agent's failure never blocks or cancels
+     * another's slot.
+     */
+    concurrency: number = DEFAULT_MULTI_AGENT_CONCURRENCY,
   ): Promise<void> {
     // ONE logger fanned out over every queued run: shared pre-work (diff +
     // intent) is streamed into each target agent's Live Log and persisted into
@@ -136,34 +150,55 @@ export class ReviewRunExecutor {
       runLog.info(`Intent computation failed (continuing without it): ${(err as Error).message}`);
     }
 
-    for (const { agent, runId } of jobs) {
-      const agentStart = Date.now();
-      logger?.info(
-        { runId, agent: agent.name, provider: agent.provider, model: agent.model, prId: pull.id },
-        `review: agent "${agent.name}" started (${agent.provider}/${agent.model})`,
-      );
-      try {
-        const outcome = await this.runOneAgent(workspaceId, pull, repo, diff, agent, runId, runLog, intent);
+    // Bounded-concurrency worker pool: each worker pulls the next queued job
+    // (shared `nextIndex` cursor — safe without locking since JS is
+    // single-threaded and the increment happens synchronously before any
+    // `await`) and processes it to completion before pulling another. This
+    // starts up to `concurrency` jobs immediately and starts the next job the
+    // instant a slot frees up, with NO change to per-agent isolation: each
+    // job's try/catch below is identical to the previous sequential loop, so
+    // one agent's failure can never affect another's slot or the pool itself
+    // (runOneAgent always persists failure/cancel state before rethrowing;
+    // the catch here only logs at the run level, same as before).
+    let nextIndex = 0;
+    const runNextJob = async (): Promise<void> => {
+      for (;;) {
+        const i = nextIndex++;
+        const job = jobs[i];
+        if (!job) return;
+        const { agent, runId } = job;
+
+        const agentStart = Date.now();
         logger?.info(
-          {
-            runId,
-            agent: agent.name,
-            findings: outcome.findings.length,
-            grounding: outcome.grounding,
-            durationMs: Date.now() - agentStart,
-          },
-          `review: agent "${agent.name}" done — ${outcome.findings.length} finding(s)`,
+          { runId, agent: agent.name, provider: agent.provider, model: agent.model, prId: pull.id },
+          `review: agent "${agent.name}" started (${agent.provider}/${agent.model})`,
         );
-      } catch (err) {
-        // runOneAgent already persisted the failure/cancel (status + error +
-        // trace) and completed the bus; here we only log at the run level.
-        const cancelled = err instanceof RunCancelledError;
-        logger?.[cancelled ? 'info' : 'error'](
-          { runId, agent: agent.name, err: (err as Error).message, durationMs: Date.now() - agentStart },
-          `review: agent "${agent.name}" ${cancelled ? 'cancelled' : 'failed'}`,
-        );
+        try {
+          const outcome = await this.runOneAgent(workspaceId, pull, repo, diff, agent, runId, runLog, intent);
+          logger?.info(
+            {
+              runId,
+              agent: agent.name,
+              findings: outcome.findings.length,
+              grounding: outcome.grounding,
+              durationMs: Date.now() - agentStart,
+            },
+            `review: agent "${agent.name}" done — ${outcome.findings.length} finding(s)`,
+          );
+        } catch (err) {
+          // runOneAgent already persisted the failure/cancel (status + error +
+          // trace) and completed the bus; here we only log at the run level.
+          const cancelled = err instanceof RunCancelledError;
+          logger?.[cancelled ? 'info' : 'error'](
+            { runId, agent: agent.name, err: (err as Error).message, durationMs: Date.now() - agentStart },
+            `review: agent "${agent.name}" ${cancelled ? 'cancelled' : 'failed'}`,
+          );
+        }
       }
-    }
+    };
+
+    const workerCount = Math.min(Math.max(1, concurrency), jobs.length);
+    await Promise.all(Array.from({ length: workerCount }, () => runNextJob()));
   }
 
   /** Execute a single agent's review against a PR, streaming progress. */

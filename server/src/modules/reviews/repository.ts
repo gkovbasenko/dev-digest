@@ -25,6 +25,9 @@ import * as runRepo from './repository/run.repo.js';
 import * as pullRepo from './repository/pull.repo.js';
 import * as skillsRepo from './repository/skills.repo.js';
 import * as contextRepo from './repository/context.repo.js';
+import * as multiAgentRepo from './repository/multi-agent.repo.js';
+import type { MultiAgentRunRow, GroupRunRow } from './repository/multi-agent.repo.js';
+export type { MultiAgentRunRow, GroupRunRow };
 
 export class ReviewRepository {
   constructor(private db: Db) {}
@@ -183,6 +186,7 @@ export class ReviewRepository {
     prId: string;
     provider: string | null;
     model: string | null;
+    multiAgentRunId?: string;
   }): Promise<string> {
     return runRepo.createAgentRun(this.db, values);
   }
@@ -247,5 +251,30 @@ export class ReviewRepository {
     skillIds: string[],
   ): Promise<{ skillId: string; path: string; order: number }[]> {
     return contextRepo.getSkillContextDocs(this.db, skillIds);
+  }
+
+  // ---- multi-agent run groups (T6) ---------------------------------------
+
+  /** Create a new multi-agent-run group row (concurrent groups permitted — AC-15). */
+  createMultiAgentRun(workspaceId: string, prId: string): Promise<MultiAgentRunRow> {
+    return multiAgentRepo.createMultiAgentRun(this.db, workspaceId, prId);
+  }
+
+  /** Latest group for a PR by `ran_at` (tie-break `id`) — AC-14. */
+  getLatestMultiAgentRun(
+    workspaceId: string,
+    prId: string,
+  ): Promise<MultiAgentRunRow | undefined> {
+    return multiAgentRepo.getLatestMultiAgentRun(this.db, workspaceId, prId);
+  }
+
+  /** Every agent_runs row (+ agent name + persisted review, if any) linked to one group. */
+  getRunsForGroup(multiAgentRunId: string): Promise<GroupRunRow[]> {
+    return multiAgentRepo.getRunsForGroup(this.db, multiAgentRunId);
+  }
+
+  /** Findings scoped to this group's own reviews (never latest-review-only — server INSIGHTS 2026-06-30). */
+  getFindingsForReviews(reviewIds: string[]): Promise<FindingRow[]> {
+    return multiAgentRepo.getFindingsForReviews(this.db, reviewIds);
   }
 }

@@ -1,0 +1,8 @@
+node_modules/
+dist/
+*.log
+
+# Auto-written by `pnpm approve-builds` (a per-machine build-script approval
+# record, e.g. `allowBuilds: {esbuild: true}`) — CI runs approve-builds fresh
+# every run via .github/workflows/server-integration.yml; never commit this.
+pnpm-workspace.yaml

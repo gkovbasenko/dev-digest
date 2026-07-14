@@ -1,5 +1,5 @@
 {
-  "id": "e5a731d9-19a7-4213-87a8-3f58c1b40867",
+  "id": "4ba15c27-05ad-44ef-a6ea-e32330abca4d",
   "prevId": "5f6e0ba7-4afd-434a-ba6d-5b3313c901d2",
   "version": "7",
   "dialect": "postgresql",
@@ -2815,9 +2815,31 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "github_run_id": {
+          "name": "github_run_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "ci_runs_github_run_id_uq": {
+          "name": "ci_runs_github_run_id_uq",
+          "columns": [
+            {
+              "expression": "github_run_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "ci_runs_ci_installation_id_ci_installations_id_fk": {
           "name": "ci_runs_ci_installation_id_ci_installations_id_fk",
@@ -2947,12 +2969,6 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": false
-        },
-        "multi_agent_run_id": {
-          "name": "multi_agent_run_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
         }
       },
       "indexes": {},
@@ -2989,19 +3005,6 @@
           "tableTo": "pull_requests",
           "columnsFrom": [
             "pr_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "agent_runs_multi_agent_run_id_multi_agent_runs_id_fk": {
-          "name": "agent_runs_multi_agent_run_id_multi_agent_runs_id_fk",
-          "tableFrom": "agent_runs",
-          "tableTo": "multi_agent_runs",
-          "columnsFrom": [
-            "multi_agent_run_id"
           ],
           "columnsTo": [
             "id"

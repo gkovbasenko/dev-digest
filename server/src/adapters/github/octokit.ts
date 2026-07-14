@@ -1,4 +1,5 @@
 import { Octokit } from 'octokit';
+import AdmZip from 'adm-zip';
 import type {
   GitHubClient,
   RepoRef,
@@ -11,6 +12,7 @@ import type {
   OpenPrPayload,
   CommitFilesPayload,
   IssueMeta,
+  WorkflowRun,
 } from '@devdigest/shared';
 import { withRetry, withTimeout } from '../../platform/resilience.js';
 
@@ -368,5 +370,67 @@ export class OctokitGitHubClient implements GitHubClient {
       withTimeout(this.octokit.rest.users.getAuthenticated(), TIMEOUT),
     );
     return res.data.login;
+  }
+
+  async listWorkflowRuns(repo: RepoRef, workflowFile: string): Promise<WorkflowRun[]> {
+    return withRetry(() =>
+      withTimeout(
+        (async () => {
+          const res = await this.octokit.rest.actions.listWorkflowRuns({
+            owner: repo.owner,
+            repo: repo.name,
+            workflow_id: workflowFile,
+            per_page: 50,
+          });
+          return res.data.workflow_runs.map((run) => ({
+            id: run.id,
+            status: run.status,
+            conclusion: run.conclusion,
+            prNumber: run.pull_requests?.[0]?.number ?? null,
+            htmlUrl: run.html_url,
+          }));
+        })(),
+        TIMEOUT,
+      ),
+    );
+  }
+
+  /**
+   * Downloads `artifactName`'s zip and extracts `devdigest-result.json`. Returns
+   * null when the run has no matching artifact or the artifact has no such entry.
+   * Never reads/logs the auth token — only the (already-authenticated) octokit
+   * client's response bytes.
+   */
+  async downloadArtifact(
+    repo: RepoRef,
+    runId: number,
+    artifactName: string,
+  ): Promise<string | null> {
+    return withRetry(() =>
+      withTimeout(
+        (async () => {
+          const { data: artifacts } = await this.octokit.rest.actions.listWorkflowRunArtifacts({
+            owner: repo.owner,
+            repo: repo.name,
+            run_id: runId,
+            per_page: 100,
+          });
+          const artifact = artifacts.artifacts.find((a) => a.name === artifactName);
+          if (!artifact) return null;
+
+          const res = await this.octokit.rest.actions.downloadArtifact({
+            owner: repo.owner,
+            repo: repo.name,
+            artifact_id: artifact.id,
+            archive_format: 'zip',
+          });
+          const zip = new AdmZip(Buffer.from(res.data as ArrayBuffer));
+          const entry = zip.getEntry('devdigest-result.json');
+          if (!entry) return null;
+          return entry.getData().toString('utf-8');
+        })(),
+        TIMEOUT,
+      ),
+    );
   }
 }

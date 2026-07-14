@@ -9,6 +9,7 @@ export function Modal({
   onClose,
   children,
   footer,
+  ariaLabel,
 }: {
   width?: number;
   title?: React.ReactNode;
@@ -16,6 +17,11 @@ export function Modal({
   onClose?: () => void;
   children?: React.ReactNode;
   footer?: React.ReactNode;
+  /** Explicit accessible name for the `role="dialog"` element (AC-12 — the
+      visible `title` alone is not wired via `aria-labelledby`, so a screen
+      reader announcing the dialog needs this instead). Pass a plain-text
+      version of the title when it isn't already a string. */
+  ariaLabel?: string;
 }) {
   // Portal to <body> so the fixed overlay escapes any transformed / stacked
   // ancestor (e.g. a FindingCard deep in the review-runs list) — otherwise the
@@ -34,6 +40,7 @@ export function Modal({
       <div
         role="dialog"
         aria-modal="true"
+        aria-label={ariaLabel}
         style={{
           position: "relative",
           width,

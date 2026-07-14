@@ -4,7 +4,9 @@
    any run-triggering mutation, AC-27) and the "View trace" drawer, which is
    addressed via the page's own `?trace=<runId>` query param/state so a
    refresh keeps the drawer open on the same run. `RunTraceDrawer` itself is
-   reused as-is (Wave 1-3, not touched here). */
+   reused as-is (Wave 1-3, not touched here). `WhereAgentsDisagree` (T11) is
+   mounted below the mode-specific view, persistent across Columns/Tabs — it
+   was built and tested in isolation but not wired here until this fix. */
 "use client";
 
 import React from "react";
@@ -14,6 +16,7 @@ import RunTraceDrawer from "@/app/repos/[repoId]/pulls/[number]/_components/RunT
 import { AgentColumns } from "../AgentColumns";
 import { AgentTabs } from "../AgentTabs";
 import { ModeToggle, type ResultsMode } from "../ModeToggle";
+import { WhereAgentsDisagree } from "../WhereAgentsDisagree";
 import { s } from "./styles";
 
 export function MultiAgentResults({ result }: { result: MultiAgentRun }) {
@@ -45,6 +48,7 @@ export function MultiAgentResults({ result }: { result: MultiAgentRun }) {
       ) : (
         <AgentTabs result={result} />
       )}
+      <WhereAgentsDisagree conflicts={result.conflicts} />
       {traceColumn && (
         <RunTraceDrawer
           runId={traceColumn.run_id}

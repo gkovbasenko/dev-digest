@@ -140,6 +140,17 @@ export interface CommitFilesPayload {
   files: CommitFile[];
 }
 
+/** One GitHub Actions workflow run (list view — CI ingest polls this). */
+export interface WorkflowRun {
+  id: number;
+  status: string | null;
+  conclusion: string | null;
+  /** PR number this run is associated with, when GitHub exposes it. */
+  prNumber: number | null;
+  /** Public run URL (`html_url`) for linking out from the CI Runs page. */
+  htmlUrl: string;
+}
+
 export interface GitHubClient {
   listPullRequests(repo: RepoRef): Promise<PrMeta[]>;
   getPullRequest(repo: RepoRef, n: number): Promise<PrDetail>;
@@ -164,6 +175,13 @@ export interface GitHubClient {
   getIssue(repo: RepoRef, n: number): Promise<IssueMeta>;
   /** GET /user — for "posting as @user". */
   currentLogin(): Promise<string>;
+  /** List runs of the workflow at `workflowFile` (e.g. "devdigest-review.yml"), most recent first. */
+  listWorkflowRuns(repo: RepoRef, workflowFile: string): Promise<WorkflowRun[]>;
+  /**
+   * Download `artifactName`'s `devdigest-result.json` contents from a workflow
+   * run's uploaded artifacts, or null when no such artifact exists on the run.
+   */
+  downloadArtifact(repo: RepoRef, runId: number, artifactName: string): Promise<string | null>;
 }
 
 // ---------- Git (simple-git, heavy) ----------

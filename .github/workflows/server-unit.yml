@@ -11,6 +11,8 @@
 #
 # DB-backed tests run in server-integration.yml. reviewer-core/** is in the
 # path filter because server aliases ../reviewer-core/src at type-check time.
+# agent-runner/** is in the filter because test/ci-manifest-roundtrip.test.ts
+# cross-imports agent-runner/src/manifest.ts (a separate package, its own deps).
 name: server unit
 
 on:
@@ -19,11 +21,13 @@ on:
     paths:
       - 'server/**'
       - 'reviewer-core/**'
+      - 'agent-runner/**'
       - '.github/workflows/server-unit.yml'
   pull_request:
     paths:
       - 'server/**'
       - 'reviewer-core/**'
+      - 'agent-runner/**'
       - '.github/workflows/server-unit.yml'
 
 permissions:
@@ -92,6 +96,14 @@ jobs:
       - name: Install reviewer-core deps
         working-directory: reviewer-core
         run: npm ci
+
+      # test/ci-manifest-roundtrip.test.ts cross-imports agent-runner's real
+      # loadAgentManifest (AC-2 parity: the studio's agentYaml and the CI
+      # reader must accept the same bytes) — a separate package with its own
+      # pnpm-lock.yaml, so it needs its own install for `yaml` to resolve.
+      - name: Install agent-runner deps
+        working-directory: agent-runner
+        run: pnpm install --frozen-lockfile
 
       # Inlined rather than `pnpm test:unit`: server/package.json is
       # skip-worktree (a local variant), so the committed package.json may

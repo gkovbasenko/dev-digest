@@ -16,9 +16,12 @@
     "table": {
       "timestamp": "Timestamp",
       "pullRequest": "Pull request",
+      "repo": "Repo",
+      "agent": "Agent",
       "source": "Source",
       "findings": "Findings",
       "cost": "Cost",
+      "duration": "Duration",
       "status": "Status"
     },
     "view": "View",
@@ -43,6 +46,7 @@
       "configure": "Configure",
       "install": "Install"
     },
+    "targetGroupLabel": "CI target",
     "targets": {
       "gha": "GitHub Actions",
       "circle": "CircleCI",
@@ -59,18 +63,32 @@
     "repoPlaceholder": "acme/payments-api",
     "filesToCreate": "FILES TO CREATE",
     "generating": "Generating…",
+    "previewError": "Could not generate the file preview. Check the repo name and try again.",
     "editable": "editable",
     "triggerLabel": "Trigger",
+    "triggers": {
+      "opened": "Opened",
+      "synchronize": "Synchronize (new commits)",
+      "reopened": "Reopened"
+    },
     "postResultsLabel": "Post results as",
     "postAs": {
       "githubReview": "GitHub review",
       "prComment": "PR comment",
       "none": "None (exit code only)"
     },
+    "postAsHint": "Only this option can block a merge (fails the check).",
+    "secretsLabel": "Expected repo secrets",
+    "secretAuto": "auto",
+    "secretNotSet": "not set — you provide this",
     "blockMergeTitle": "Block merge on findings",
     "blockMergeDesc": "Requires a GitHub App — not available with PAT in local mode",
     "installCardTitle": "Open a PR with these files",
     "installCardBody": "DevDigest opens a PR in {repo} titled “Add DevDigest CI review” with the {count} generated files.",
+    "filesOptionTitle": "Copy files as a zip",
+    "filesOptionBody": "Download the generated files and add them to the repo yourself — no pull request is opened.",
+    "filesDownloaded": "Downloaded {count} files.",
+    "installError": "Could not complete the export. Check the repo name and try again.",
     "ownerRepo": "owner/repo",
     "secretNote": "Add {key} to the repo's Actions secrets before the workflow runs."
   },
@@ -78,11 +96,20 @@
     "heading": "Continuous Integration",
     "subtitle": "Run this agent automatically on pull requests in a target repo.",
     "exportToCi": "Export to CI",
+    "addToCi": "Add to CI",
     "publish": "Publish to CI",
     "update": "Update CI",
     "noRepo": "Connect a repository first",
     "empty": "Not deployed to CI yet. Use “Publish to CI” to open a PR that adds the workflow + agent config.",
-    "installed": "installed {date}"
+    "installed": "installed {date}",
+    "installationsTitle": "Installed repositories",
+    "noInstallations": "Not deployed to CI yet",
+    "noInstallationsBody": "Use “Add to CI” to open a PR that adds the workflow + agent config to a repo.",
+    "version": "v{version}",
+    "noVersion": "—",
+    "historyTitle": "Run history",
+    "noRuns": "No CI runs yet for this agent.",
+    "failCiOnLabel": "Fail CI on"
   },
   "publishDialog": {
     "title": "Publish to CI",

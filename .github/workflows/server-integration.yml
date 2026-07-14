@@ -8,6 +8,10 @@
 #
 # Linux only — testcontainers needs a Linux Docker daemon (Windows runners
 # don't provide one).
+#
+# agent-runner/** is in the path filter because src/modules/ci/ci.it.test.ts
+# exercises a real export: CiService reads agent-runner's ncc-built
+# dist/index.js (gitignored, built fresh in this job — see the build step).
 name: server integration
 
 on:
@@ -15,10 +19,12 @@ on:
     branches: [main]
     paths:
       - 'server/**'
+      - 'agent-runner/**'
       - '.github/workflows/server-integration.yml'
   pull_request:
     paths:
       - 'server/**'
+      - 'agent-runner/**'
       - '.github/workflows/server-integration.yml'
 
 permissions:
@@ -56,6 +62,27 @@ jobs:
       - name: Install reviewer-core deps
         working-directory: reviewer-core
         run: npm ci
+
+      # ci.it.test.ts's export tests read agent-runner's ncc-built bundle
+      # (`.devdigest/runner/index.js` in the exported PR) via readRunnerBundle().
+      # dist/ is gitignored, so it must be built fresh in every CI run.
+      #
+      # `pnpm approve-builds --all` is required before `pnpm build`: pnpm's
+      # isolated node_modules linker (agent-runner has no .npmrc overriding it,
+      # unlike server/client's node-linker=hoisted) blocks any dependency's
+      # postinstall script — here, esbuild's (a transitive dep of vitest) — until
+      # explicitly approved, and `pnpm run build` hard-fails via pnpm's
+      # pre-script deps-status-check while it's pending. The approval is a
+      # per-machine pnpm state, not something `--frozen-lockfile` or
+      # package.json can carry, so it must be re-run on every fresh CI runner.
+      # esbuild's postinstall only downloads its own platform binary — a
+      # standard, safe operation.
+      - name: Build agent-runner bundle
+        working-directory: agent-runner
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm approve-builds --all
+          pnpm build
 
       # Inlined rather than `pnpm test:integration`: server/package.json is
       # skip-worktree, so we don't rely on the committed file carrying the split

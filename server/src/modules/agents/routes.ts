@@ -5,7 +5,7 @@ import { CiFailOn, Provider, ReviewStrategy, SetContextInput } from '@devdigest/
 import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
 import { NotFoundError } from '../../platform/errors.js';
-import { AgentsService } from './service.js';
+import { AgentsService, AgentStatsMinimal } from './service.js';
 
 /** `/providers/:id` addresses a provider by name, not a uuid. */
 const ProviderParams = z.object({ id: Provider });
@@ -29,6 +29,7 @@ const VersionParams = z.object({
  *   GET    /agents/:id/context      → attached Project Context doc paths (ordered)
  *   POST   /agents/:id/context      → set/reorder attached doc paths (?repo_id=… + caps)
  *   GET    /agents/:id/models       → dynamic model list for the agent's provider
+ *   GET    /agents/:id/stats        → minimal run stats (count, avg cost/latency)
  *   GET    /providers/:id/models    → dynamic model list for a provider (editor)
  */
 
@@ -203,6 +204,17 @@ export default async function agentsRoutes(appBase: FastifyInstance) {
     if (!agent) throw new NotFoundError('Agent not found');
     return service.listModels(agent.provider);
   });
+
+  app.get(
+    '/agents/:id/stats',
+    { schema: { params: IdParams, response: { 200: AgentStatsMinimal } } },
+    async (req) => {
+      const { workspaceId } = await getContext(app.container, req);
+      const stats = await service.getStats(workspaceId, req.params.id);
+      if (!stats) throw new NotFoundError('Agent not found');
+      return stats;
+    },
+  );
 
   app.get('/providers/:id/models', { schema: { params: ProviderParams } }, async (req) => {
     await getContext(app.container, req);

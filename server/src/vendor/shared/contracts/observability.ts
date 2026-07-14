@@ -6,6 +6,7 @@ import { Severity } from './findings.js';
  *
  * These are NEW contracts (A5 owns this file; the barrel re-exports it). They
  * sit alongside A2's `review-api.ts`:
+ *   - MultiAgentRunRequest the request body of POST /pulls/:id/multi-agent-run
  *   - MultiAgentRun        the response of POST /pulls/:id/multi-agent-run
  *   - AgentColumn          one agent's column in the multi-agent view
  *   - Conflict / ConflictTake  where agents disagree on the same file:line
@@ -18,6 +19,12 @@ import { Severity } from './findings.js';
 // ---------------------------------------------------------------------------
 // Multi-Agent Review
 // ---------------------------------------------------------------------------
+
+/** Request body of POST /pulls/:id/multi-agent-run. */
+export const MultiAgentRunRequest = z.object({
+  agentIds: z.array(z.string()).min(1),
+});
+export type MultiAgentRunRequest = z.infer<typeof MultiAgentRunRequest>;
 
 /** A finding as surfaced in a multi-agent column (subset of FindingRecord). */
 export const AgentColumnFinding = z.object({

@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import type { Container } from '../../platform/container.js';
 import type {
   Agent,
@@ -10,8 +11,24 @@ import type {
 } from '@devdigest/shared';
 import { ValidationError } from '../../platform/errors.js';
 import { validateContextAttachment } from '../_shared/context-attach.js';
+import { estimateCost } from '../../adapters/llm/pricing.js';
 import { AgentsRepository } from './repository.js';
 import { toAgentDto, toAgentVersionDto } from './helpers.js';
+
+/**
+ * Minimal per-agent stats subset (T5 — GET /agents/:id/stats). Deliberately NOT
+ * the full `AgentStats` shared contract (accept-rate/trend/findings_by_severity
+ * are a separate spec) — a local shape kept in this module so it doesn't imply
+ * a change to the shared contract or require a client-side mirror.
+ */
+export const AgentStatsMinimal = z.object({
+  agent_id: z.string(),
+  agent_name: z.string(),
+  runs: z.number().int(),
+  avg_cost_usd: z.number().nullable(),
+  avg_latency_ms: z.number().nullable(),
+});
+export type AgentStatsMinimal = z.infer<typeof AgentStatsMinimal>;
 
 /**
  * A2 — agents service. Business logic for the Agents tab + Agent Editor.
@@ -226,5 +243,41 @@ export class AgentsService {
     } catch {
       return [];
     }
+  }
+
+  /**
+   * Minimal per-agent stats subset (T5): run count + avg cost/latency over
+   * 'done' runs. Cost is derived via `estimateCost` (agent_runs has no
+   * cost_usd column) and is null-safe for unknown models; both averages are
+   * null when there are zero runs or zero 'done' runs. Workspace-scoped:
+   * returns undefined when the agent isn't in this workspace (route → 404).
+   */
+  async getStats(workspaceId: string, agentId: string): Promise<AgentStatsMinimal | undefined> {
+    const agent = await this.repo.getById(workspaceId, agentId);
+    if (!agent) return undefined;
+
+    const [runs, doneRuns] = await Promise.all([
+      this.repo.countRuns(workspaceId, agentId),
+      this.repo.getDoneRunMetrics(workspaceId, agentId),
+    ]);
+
+    const costs: number[] = [];
+    const latencies: number[] = [];
+    for (const run of doneRuns) {
+      if (run.model && run.tokensIn != null && run.tokensOut != null) {
+        const cost = estimateCost(run.model, run.tokensIn, run.tokensOut);
+        if (cost !== null) costs.push(cost);
+      }
+      if (run.durationMs != null) latencies.push(run.durationMs);
+    }
+
+    return AgentStatsMinimal.parse({
+      agent_id: agent.id,
+      agent_name: agent.name,
+      runs,
+      avg_cost_usd: costs.length > 0 ? costs.reduce((a, b) => a + b, 0) / costs.length : null,
+      avg_latency_ms:
+        latencies.length > 0 ? latencies.reduce((a, b) => a + b, 0) / latencies.length : null,
+    });
   }
 }

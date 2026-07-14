@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
-import { RunRequest } from '@devdigest/shared';
+import { MultiAgentRunRequest, RunRequest } from '@devdigest/shared';
 import type { RunEvent } from '@devdigest/shared';
 import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
@@ -21,6 +21,8 @@ import { ReviewService } from './service.js';
  *   GET    /pulls/:id/prior-prs                        → other merged PRs touching the same files (no LLM, no persistence)
  *   GET    /pulls/:id/brief                            → cached Why+Risk brief, always 200 (AC-9)
  *   POST   /pulls/:id/brief                            → (re)generate + persist the Why+Risk brief; returns it
+ *   POST   /pulls/:id/multi-agent-run  {agentIds}       → trigger a multi-agent fan-out; returns run_ids immediately
+ *   GET    /pulls/:id/multi-agent                       → latest MultiAgentRun group for the PR, or null if none
  */
 const FINDING_ACTIONS = ['accept', 'dismiss'] as const;
 export default async function reviewsRoutes(appBase: FastifyInstance) {
@@ -204,4 +206,25 @@ export default async function reviewsRoutes(appBase: FastifyInstance) {
       return service.generateBrief(workspaceId, req.params.id);
     },
   );
+
+  // ---- Multi-agent run (fan-out trigger) -----------------------------------
+  // Same tight per-route limit as /pulls/:id/review: each call fans out to N
+  // paid LLM runs (Non-functional — rate/cost).
+  app.post(
+    '/pulls/:id/multi-agent-run',
+    {
+      schema: { params: IdParams, body: MultiAgentRunRequest },
+      config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+    },
+    async (req) => {
+      const { workspaceId } = await getContext(container, req);
+      return service.triggerMultiAgentRun(workspaceId, req.params.id, req.body.agentIds, req.log);
+    },
+  );
+
+  // ---- Latest multi-agent run for a PR (or null when none exists) ---------
+  app.get('/pulls/:id/multi-agent', { schema: { params: IdParams } }, async (req) => {
+    const { workspaceId } = await getContext(container, req);
+    return service.getMultiAgentRun(workspaceId, req.params.id);
+  });
 }

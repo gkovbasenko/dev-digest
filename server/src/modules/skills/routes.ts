@@ -36,7 +36,7 @@ import { SkillsService } from './service.js';
 const CreateSkillBody = z.object({
   name: z.string().min(1),
   description: z.string().optional(),
-  type: SkillType.optional(),
+  type: SkillType,
   body: z.string().min(1),
   enabled: z.boolean().optional(),
 });
@@ -126,11 +126,11 @@ export default async function skillsRoutes(appBase: FastifyInstance) {
     },
   );
 
-  app.delete('/skills/:id', { schema: { params: IdParams } }, async (req) => {
+  app.delete('/skills/:id', { schema: { params: IdParams } }, async (req, reply) => {
     const { workspaceId } = await getContext(app.container, req);
     const ok = await service.delete(workspaceId, req.params.id);
     if (!ok) throw new NotFoundError('Skill not found');
-    return { ok: true };
+    reply.status(204);
   });
 
   app.get(

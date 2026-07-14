@@ -5,6 +5,14 @@ Newest first. See `.claude/skills/engineering-insights/SKILL.md` for what belong
 
 ---
 
+## 2026-07-14 — A component built and unit-tested in isolation can still be completely unmounted — grep for its import chain to the page root before calling a UI task done
+
+`WhereAgentsDisagree` (Multi-Agent Review feature) was fully built with passing tests (`WhereAgentsDisagree.test.tsx`, all ACs green) but was never imported by `MultiAgentResults.tsx` or any other file reachable from `/multi-agent` — a parallel task built the results shell and the disagree block in the same wave, and the hand-off ("shell task mounts it") silently dropped. `plan-verifier`/typecheck/vitest all passed because nothing in that chain checks *reachability from the page*, only that the component's own test file exercises its own props correctly.
+
+**How to apply:** when a plan splits "build component X" from "build the shell that mounts X" into two tasks, before marking either done, run `grep -rn "<ComponentName>" <feature-root>/ --include="*.tsx" | grep -v ".test."` and confirm a hit exists OUTSIDE the component's own folder. A green test suite is not evidence of this.
+
+**Evidence:** this session (2026-07-14); `client/src/app/multi-agent/_components/WhereAgentsDisagree/` built+tested but zero non-test/non-self references until fixed in `client/src/app/multi-agent/_components/MultiAgentResults/MultiAgentResults.tsx`; caught by manual comparison against the feature's mockup screenshots, not by any automated gate.
+
 ## 2026-07-14 — A `.js`-suffixed relative import between two `vendor/shared/contracts/*.ts` files builds fine under `tsc`/vitest but fails `next build`/`next dev` — needs a webpack `extensionAlias`, not just avoiding the barrel
 
 Superficially similar to the 2026-07-08 barrel-import entry below, but a **different, additional** failure mode that survived it. `client/tsconfig.json` sets `moduleResolution:"Bundler"`, which lets `tsc`/vitest silently resolve a `.js` specifier to its `.ts` source — so `observability.ts`'s own `import { Severity } from './findings.js'` (a normal cross-contract-file import, `findings.ts` exists, `findings.js` does not) typechecks and unit-tests clean. Next.js's webpack has no matching resolution rule, so the MOMENT any file value-imports that contract even via the correct non-barrel subpath (`@devdigest/shared/contracts/observability`, the exact fix the 07-08 entry recommends), webpack still has to bundle `observability.ts` itself, hits its internal `./findings.js` specifier, and fails with `Module not found: Can't resolve './findings.js'` — both `next dev` (500s the whole app) and `next build`/CI (hard build failure), while `pnpm typecheck`/`pnpm test` stay 100% green throughout. The subpath-import workaround only helps when the target contract file has NO cross-file relative imports of its own (true for `context.ts`, the 07-08 precedent; false for `observability.ts`, which imports `Severity` from `findings.ts`).
